@@ -72,41 +72,41 @@ interface DeviceSettings {
 
 // --- Mock Data (Simulating DB) ---
 
-const MOCK_APPS: AppRule[] = [
-  { 
-    id: '1', appName: "TikTok", packageName: 'com.zhiliaoapp.musically', category: "Social", icon: "🎵", color: "bg-black", 
-    isGlobalLocked: false, 
-    schedules: [{ id: 't1', start: '18:00', end: '20:00', days: ['All'] }], 
-    dailyUsageLimitMinutes: 60, usedTodayMinutes: 45 
-  },
-  { 
-    id: '2', appName: "Roblox", packageName: 'com.roblox.client', category: "Game", icon: "🎮", color: "bg-red-500", 
-    isGlobalLocked: true, 
-    schedules: [], 
-    dailyUsageLimitMinutes: 30, usedTodayMinutes: 0 
-  },
-  { 
-    id: '3', appName: "Chrome", packageName: 'com.android.chrome', category: "Browser", icon: "🌐", color: "bg-blue-500", 
-    isGlobalLocked: false, 
-    schedules: [{ id: 't2', start: '08:00', end: '21:00', days: ['All'] }], 
-    dailyUsageLimitMinutes: 120, usedTodayMinutes: 30 
-  }
-];
+// const MOCK_APPS: AppRule[] = [
+//   { 
+//     id: '1', appName: "TikTok", packageName: 'com.zhiliaoapp.musically', category: "Social", icon: "🎵", color: "bg-black", 
+//     isGlobalLocked: false, 
+//     schedules: [{ id: 't1', start: '18:00', end: '20:00', days: ['All'] }], 
+//     dailyUsageLimitMinutes: 60, usedTodayMinutes: 45 
+//   },
+//   { 
+//     id: '2', appName: "Roblox", packageName: 'com.roblox.client', category: "Game", icon: "🎮", color: "bg-red-500", 
+//     isGlobalLocked: true, 
+//     schedules: [], 
+//     dailyUsageLimitMinutes: 30, usedTodayMinutes: 0 
+//   },
+//   { 
+//     id: '3', appName: "Chrome", packageName: 'com.android.chrome', category: "Browser", icon: "🌐", color: "bg-blue-500", 
+//     isGlobalLocked: false, 
+//     schedules: [{ id: 't2', start: '08:00', end: '21:00', days: ['All'] }], 
+//     dailyUsageLimitMinutes: 120, usedTodayMinutes: 30 
+//   }
+// ];
 
-const MOCK_ZONES: Zone[] = [
-  { id: 'z1', name: 'Lincoln High School', type: 'safe', points: [{lat:0,lng:0}], alertMessage: 'Child has arrived at school.' },
-  { id: 'z2', name: 'Downtown Construction', type: 'danger', points: [{lat:0,lng:0}], alertMessage: 'ALERT: Child entered dangerous construction zone!' }
-];
+// const MOCK_ZONES: Zone[] = [
+//   { id: 'z1', name: 'Lincoln High School', type: 'safe', points: [{lat:0,lng:0}], alertMessage: 'Child has arrived at school.' },
+//   { id: 'z2', name: 'Downtown Construction', type: 'danger', points: [{lat:0,lng:0}], alertMessage: 'ALERT: Child entered dangerous construction zone!' }
+// ];
 
-const MOCK_WEB: WebFilter = {
-  blockedCategories: ['pornography', 'gambling', 'violence'],
-  blockedUrls: ['bad-site.com', 'gambling-hub.net'],
-  history: [
-    { url: 'https://wikipedia.org/wiki/React', title: 'React (software) - Wikipedia', timestamp: '10:30 AM', riskScore: 0 },
-    { url: 'https://math-solver.com', title: 'Free Algebra Solver', timestamp: '11:15 AM', riskScore: 10 },
-    { url: 'https://sketchy-game-mods.net', title: 'Free Robux Generator', timestamp: '2:00 PM', riskScore: 85 }
-  ]
-};
+// const MOCK_WEB: WebFilter = {
+//   blockedCategories: ['pornography', 'gambling', 'violence'],
+//   blockedUrls: ['bad-site.com', 'gambling-hub.net'],
+//   history: [
+//     { url: 'https://wikipedia.org/wiki/React', title: 'React (software) - Wikipedia', timestamp: '10:30 AM', riskScore: 0 },
+//     { url: 'https://math-solver.com', title: 'Free Algebra Solver', timestamp: '11:15 AM', riskScore: 10 },
+//     { url: 'https://sketchy-game-mods.net', title: 'Free Robux Generator', timestamp: '2:00 PM', riskScore: 85 }
+//   ]
+// };
 
 // --- Components ---
 
@@ -117,15 +117,57 @@ const App = () => {
   const [lastSynced, setLastSynced] = useState("Just now");
 
   // State mimicking DB collections
-  const [apps, setApps] = useState<AppRule[]>(MOCK_APPS);
-  const [zones, setZones] = useState<Zone[]>(MOCK_ZONES);
-  const [webFilter, setWebFilter] = useState<WebFilter>(MOCK_WEB);
+  const [loading, setLoading] = useState(true);
+  const [apps, setApps] = useState<AppRule[]>([]);
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [webFilter, setWebFilter] = useState<WebFilter>({ // Start empty
+      blockedCategories: [], blockedUrls: [], history: []
+  });
   const [settings, setSettings] = useState<DeviceSettings>({
     bedtimeWeeknight: '21:00',
     bedtimeWeekend: '23:00',
     uninstallProtection: true,
     locationTracking: true
   });
+
+
+// --- FETCH DATA FROM SERVER ---
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Request data from your 4 server endpoints
+        const [appRes, zoneRes, settingRes, webRes] = await Promise.all([
+          fetch('/api/apps'),
+          fetch('/api/zones'),
+          fetch('/api/settings'),
+          fetch('/api/web/history')
+        ]);
+        
+        // Convert responses to JSON
+        const appData = await appRes.json();
+        const zoneData = await zoneRes.json();
+        const settingData = await settingRes.json();
+        const webData = await webRes.json();
+
+        // Update the UI with real data
+        if(Array.isArray(appData)) setApps(appData);
+        if(Array.isArray(zoneData)) setZones(zoneData);
+        if(webData) setWebFilter(webData);
+        // Merge settings
+        setSettings(prev => ({ ...prev, ...settingData }));
+
+        setLastSynced(new Date().toLocaleTimeString());
+      } catch (err) {
+        console.error("Failed to connect to server:", err);
+      } finally {
+        setLoading(false); // Stop loading circle
+      }
+    };
+
+    fetchData();
+  }, []);
+
+
 
   // AI State
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
@@ -156,14 +198,23 @@ const App = () => {
 
   // --- Actions ---
 
-  const handleSync = () => {
+  const handleSync = async () => {
     setIsSyncing(true);
-    // Simulate API Call to MongoDB Backend
-    // In real app: await fetch('https://api.parentalwatch.com/sync', { method: 'POST', body: JSON.stringify({ ...data }) })
-    setTimeout(() => {
-      setIsSyncing(false);
-      setLastSynced(new Date().toLocaleTimeString());
-    }, 1500);
+    try {
+       // Send current settings to the server
+       await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(settings)
+       });
+       
+       setLastSynced(new Date().toLocaleTimeString());
+    } catch(e) {
+       console.error(e);
+       alert("Sync failed. Is the server running?");
+    } finally {
+       setIsSyncing(false);
+    }
   };
 
   const toggleGlobalLock = (id: string) => {
@@ -238,6 +289,9 @@ const App = () => {
     </button>
   );
 
+  if (loading) {
+      return <div className="min-h-screen flex items-center justify-center text-xl font-bold text-indigo-600">Loading Dashboard...</div>;
+  }
   return (
     <div className="min-h-screen flex bg-slate-50 font-sans text-slate-900">
       {/* Sidebar */}
