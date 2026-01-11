@@ -6,6 +6,10 @@ let currentDevice = null;
 let devices = [];
 let locationInterval = null;
 
+let liveMap = null;
+let liveMarker = null;
+
+
 // --- INIT ---
 document.addEventListener('DOMContentLoaded', () => {
     if (window.lucide) window.lucide.createIcons();
@@ -138,7 +142,16 @@ async function selectDevice(device) {
     // Load Data
     if (locationInterval) clearInterval(locationInterval);
     await Promise.all([ loadLocation(device.deviceId), loadApps(device.deviceId) ]);
-    
+
+    if (!liveMap) {
+        liveMap = L.map('liveMap').setView([20.5937, 78.9629], 5); // India default
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(liveMap);
+    }
+
     // Live Poll (every 3s)
     locationInterval = setInterval(() => loadLocation(device.deviceId), 3000);
 }
@@ -214,6 +227,22 @@ async function loadLocation(hardwareId) {
         const loc = await res.json();
         
         if (loc && loc.latitude) {
+
+                    if (liveMap) {
+            const pos = [loc.latitude, loc.longitude];
+
+            // Create marker once
+            if (!liveMarker) {
+                liveMarker = L.marker(pos).addTo(liveMap);
+                liveMap.setView(pos, 16); // initial zoom to location
+            } else {
+                liveMarker.setLatLng(pos);
+            }
+
+            // ALWAYS auto zoom to location
+            liveMap.setView(pos, liveMap.getZoom());
+        }
+
             const timeStr = new Date(loc.timestamp).toLocaleTimeString();
             const coordsStr = `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`;
             
@@ -348,6 +377,22 @@ function renderDashboard(loc, apps) {
 
     // 5. Update Map & Telemetry
     if (loc && loc.latitude) {
+
+        if (liveMap) {
+            const pos = [loc.latitude, loc.longitude];
+
+            // Create marker once
+            if (!liveMarker) {
+                liveMarker = L.marker(pos).addTo(liveMap);
+                liveMap.setView(pos, 16); // initial zoom to location
+            } else {
+                liveMarker.setLatLng(pos);
+            }
+
+            // ALWAYS auto zoom to location
+            liveMap.setView(pos, liveMap.getZoom());
+        }
+
         // Battery
         document.getElementById('dash-battery-text').textContent = (loc.batteryLevel || 0) + '%';
         document.getElementById('dash-battery-bar').style.width = (loc.batteryLevel || 0) + '%';
