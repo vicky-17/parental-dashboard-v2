@@ -7,19 +7,20 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = 'your_super_secret_key_123'; // In production, use process.env.JWT_SECRET
+const JWT_SECRET = 'your_super_secret_key_123'; 
 
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname))); // Serve static frontend files
+// Serve the current directory as static files (for index.html, dashboard.html, etc.)
+app.use(express.static(__dirname));
 
 // Database Connection
 mongoose.connect('mongodb://localhost:27017/parentalControl', {
     useNewUrlParser: true,
     useUnifiedTopology: true
-}).then(() => console.log('Connected to MongoDB'))
-  .catch(err => console.error('MongoDB connection error:', err));
+}).then(() => console.log('✅ Connected to MongoDB'))
+  .catch(err => console.error('❌ MongoDB connection error:', err));
 
 // --- Schemas ---
 const UserSchema = new mongoose.Schema({
@@ -29,7 +30,7 @@ const UserSchema = new mongoose.Schema({
 
 const DeviceSchema = new mongoose.Schema({
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    deviceId: { type: String }, // Hardware ID from child device
+    deviceId: { type: String }, 
     name: { type: String },
     pairingCode: { type: String },
     isPaired: { type: Boolean, default: false }
@@ -39,6 +40,7 @@ const LocationSchema = new mongoose.Schema({
     deviceId: String,
     latitude: Number,
     longitude: Number,
+    batteryLevel: Number, // Added battery level
     timestamp: { type: Date, default: Date.now }
 });
 
@@ -47,8 +49,8 @@ const AppRuleSchema = new mongoose.Schema({
     packageName: String,
     appName: String,
     isBlocked: { type: Boolean, default: false },
-    timeLimit: { type: Number, default: 0 }, // in minutes
-    usedToday: { type: Number, default: 0 } // in minutes
+    timeLimit: { type: Number, default: 0 }, 
+    usedToday: { type: Number, default: 0 } 
 });
 
 const User = mongoose.model('User', UserSchema);
@@ -71,7 +73,7 @@ const authenticateToken = (req, res, next) => {
 
 // --- API Routes ---
 
-// Auth
+// 1. Auth
 app.post('/api/auth/register', async (req, res) => {
     try {
         const hashedPassword = await bcrypt.hash(req.body.password, 10);
@@ -91,14 +93,14 @@ app.post('/api/auth/login', async (req, res) => {
             const token = jwt.sign({ userId: user._id }, JWT_SECRET);
             res.json({ token, email: user.email });
         } else {
-            res.send('Not Allowed');
+            res.status(403).send('Not Allowed');
         }
     } catch (error) {
         res.status(500).send(error.message);
     }
 });
 
-// Devices
+// 2. Devices (Parent Side)
 app.get('/api/devices', authenticateToken, async (req, res) => {
     try {
         const devices = await Device.find({ userId: req.user.userId });
@@ -124,27 +126,28 @@ app.post('/api/devices/add', authenticateToken, async (req, res) => {
     }
 });
 
+// 3. Pairing (Child Side)
 app.post('/api/devices/pair', async (req, res) => {
     try {
-        const { code, deviceId, name } = req.body;
+        const { code, deviceId, deviceName } = req.body; // Matches Android naming
         const device = await Device.findOne({ pairingCode: code, isPaired: false });
-        if (!device) return res.status(404).json({ message: 'Invalid or expired code' });
+        if (!device) return res.status(404).json({ success: false, message: 'Invalid Code' });
 
         device.deviceId = deviceId;
-        device.name = name;
+        device.name = deviceName || "Child Device";
         device.isPaired = true;
         await device.save();
-        res.json({ success: true, message: 'Device paired successfully' });
+        res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-// Data Ingestion (From Child)
+// 4. Data Sync (Child -> Server)
 app.post('/api/location', async (req, res) => {
     try {
-        const { deviceId, latitude, longitude } = req.body;
-        const loc = new Location({ deviceId, latitude, longitude });
+        const { deviceId, latitude, longitude, batteryLevel } = req.body;
+        const loc = new Location({ deviceId, latitude, longitude, batteryLevel });
         await loc.save();
         res.json({ success: true });
     } catch (error) {
@@ -155,25 +158,31 @@ app.post('/api/location', async (req, res) => {
 app.post('/api/apps', async (req, res) => {
     try {
         const { deviceId, apps } = req.body; 
-        // apps = [{ packageName, name, usedTime }]
         
-        for (const app of apps) {
-            await AppRule.findOneAndUpdate(
-                { deviceId, packageName: app.packageName },
-                { 
-                    $set: { appName: app.name, usedToday: app.usedTime || 0 },
-                    $setOnInsert: { isBlocked: false, timeLimit: 0 }
-                },
-                { upsert: true, new: true }
-            );
+        // FIXED: Mapping matches Android "appName" and "minutes"
+        if (apps && Array.isArray(apps)) {
+            for (const app of apps) {
+                await AppRule.findOneAndUpdate(
+                    { deviceId, packageName: app.packageName },
+                    { 
+                        $set: { 
+                            appName: app.appName, // Fixed name 
+                            usedToday: app.minutes || 0 // Fixed name
+                        },
+                        $setOnInsert: { isBlocked: false, timeLimit: 0 }
+                    },
+                    { upsert: true, new: true }
+                );
+            }
         }
         res.json({ success: true });
     } catch (error) {
+        console.error(error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// Dashboard Data
+// 5. Dashboard Data (Server -> Parent)
 app.get('/api/data/:deviceId/apps', authenticateToken, async (req, res) => {
     try {
         const apps = await AppRule.find({ deviceId: req.params.deviceId });
@@ -192,7 +201,7 @@ app.get('/api/data/:deviceId/location', authenticateToken, async (req, res) => {
     }
 });
 
-// Rule Updates
+// 6. Rules (Parent Updates)
 app.post('/api/rules/update', authenticateToken, async (req, res) => {
     try {
         const { deviceId, packageName, isBlocked, timeLimit } = req.body;
@@ -206,9 +215,8 @@ app.post('/api/rules/update', authenticateToken, async (req, res) => {
     }
 });
 
-// Serve Dashboard
-app.get('/dashboard', (req, res) => {
-    res.sendFile(path.join(__dirname, 'dashboard.html'));
-});
+// Serve Frontend
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'dashboard.html')));
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

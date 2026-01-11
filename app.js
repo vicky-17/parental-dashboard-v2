@@ -2,16 +2,15 @@
 const API_URL = '/api';
 
 // --- State ---
-let currentUser = null;
 let currentDevice = null;
 let devices = [];
 
-// --- Init ---
+// --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialize Lucide icons if library loaded
+    // Initialize Lucide icons
     if (window.lucide) window.lucide.createIcons();
 
-    // Check routing
+    // Determine if we are on Login Page or Dashboard
     if (document.getElementById('auth-form')) {
         initAuth();
     } else if (document.getElementById('device-list')) {
@@ -28,7 +27,7 @@ function initAuth() {
     const errorMsg = document.getElementById('error-message');
     let isLogin = true;
 
-    // Check if already logged in
+    // Auto-redirect if token exists
     if (localStorage.getItem('token')) {
         window.location.href = 'dashboard.html';
         return;
@@ -150,29 +149,40 @@ function renderDeviceList() {
     
     devices.forEach(device => {
         const li = document.createElement('li');
-        li.className = `device-item p-3 rounded-lg cursor-pointer hover:bg-gray-50 flex items-center gap-3 transition-all ${currentDevice?._id === device._id ? 'active' : ''}`;
+        // Styling based on selection and pairing status
+        const isSelected = currentDevice && currentDevice._id === device._id;
+        li.className = `p-3 rounded-lg cursor-pointer flex items-center gap-3 transition-all mb-1 ${
+            isSelected ? 'bg-indigo-50 border border-indigo-100' : 'hover:bg-gray-50 border border-transparent'
+        }`;
+        
         li.innerHTML = `
-            <div class="bg-indigo-100 p-2 rounded text-indigo-600">
-                <i data-lucide="${device.isPaired ? 'smartphone' : 'loader'}" width="18"></i>
+            <div class="${device.isPaired ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-400'} p-2 rounded-lg">
+                <i data-lucide="${device.isPaired ? 'smartphone' : 'loader'}" width="20"></i>
             </div>
             <div>
-                <div class="font-medium text-sm text-gray-800">${device.name || 'Pending Device'}</div>
-                <div class="text-xs text-gray-500">${device.isPaired ? 'Online' : 'Pairing...'}</div>
+                <div class="font-bold text-sm text-gray-800">${device.name || 'Unknown Device'}</div>
+                <div class="text-xs ${device.isPaired ? 'text-green-600 font-medium' : 'text-gray-400'}">
+                    ${device.isPaired ? 'Online' : 'Pairing Pending...'}
+                </div>
             </div>
         `;
         li.onclick = () => selectDevice(device);
         list.appendChild(li);
     });
+    
     if (window.lucide) window.lucide.createIcons();
 }
 
 async function selectDevice(device) {
-    if (!device.isPaired) return;
+    if (!device.isPaired) {
+        alert("This device is not paired yet. Please connect the child's phone first.");
+        return;
+    }
     
     currentDevice = device;
-    renderDeviceList(); // Update active state
+    renderDeviceList(); // Refresh sidebar styling
 
-    // Show content, hide empty state
+    // Show Content
     document.getElementById('empty-state').classList.add('hidden');
     document.getElementById('dashboard-content').classList.remove('hidden');
     document.getElementById('device-header').classList.remove('hidden');
@@ -198,13 +208,14 @@ async function loadLocation(hardwareId) {
     const mapLink = document.getElementById('maps-link');
 
     if (loc && loc.latitude) {
-        coordsEl.textContent = `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`;
-        timeEl.textContent = `Updated: ${new Date(loc.timestamp).toLocaleString()}`;
+        coordsEl.textContent = `${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}`;
+        timeEl.textContent = `Updated: ${new Date(loc.timestamp).toLocaleTimeString()}`;
+        // FIXED: Correct Google Maps Link
         mapLink.href = `https://www.google.com/maps/search/?api=1&query=${loc.latitude},${loc.longitude}`;
         mapLink.classList.remove('opacity-50', 'pointer-events-none');
     } else {
-        coordsEl.textContent = "No data yet";
-        timeEl.textContent = "--";
+        coordsEl.textContent = "Waiting for data...";
+        timeEl.textContent = "Last updated: Never";
         mapLink.classList.add('opacity-50', 'pointer-events-none');
     }
 }
@@ -216,30 +227,46 @@ async function loadApps(hardwareId) {
     const tbody = document.getElementById('app-list-body');
     tbody.innerHTML = '';
 
+    if (apps.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center py-6 text-gray-400">No apps synced yet. Open the child app to sync.</td></tr>`;
+        return;
+    }
+
     apps.forEach(app => {
         const row = document.createElement('tr');
+        row.className = "hover:bg-gray-50 transition-colors";
         row.innerHTML = `
             <td class="px-6 py-4">
-                <div class="font-medium text-gray-900">${app.appName || app.packageName}</div>
-                <div class="text-xs text-gray-400">${app.packageName}</div>
-            </td>
-            <td class="px-6 py-4 text-sm text-gray-600">${app.usedToday} min</td>
-            <td class="px-6 py-4 text-center">
-                <input type="checkbox" class="w-5 h-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" 
-                    ${app.isBlocked ? 'checked' : ''} 
-                    onchange="updateAppRule('${app.packageName}', this.checked, ${app.timeLimit})">
+                <div class="font-bold text-gray-800">${app.appName || app.packageName}</div>
+                <div class="text-xs text-gray-400 font-mono">${app.packageName}</div>
             </td>
             <td class="px-6 py-4">
-                <input type="number" class="w-20 p-1 border rounded text-center text-sm" 
-                    value="${app.timeLimit}" min="0" 
-                    onchange="updateAppRule('${app.packageName}', ${app.isBlocked}, this.value)">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    ${app.usedToday} min
+                </span>
+            </td>
+            <td class="px-6 py-4 text-center">
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="sr-only peer" 
+                        ${app.isBlocked ? 'checked' : ''} 
+                        onchange="updateAppRule('${app.packageName}', this.checked, ${app.timeLimit})">
+                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500"></div>
+                </label>
+            </td>
+            <td class="px-6 py-4">
+                <div class="flex items-center gap-2">
+                    <input type="number" class="w-20 p-2 border border-gray-300 rounded-lg text-center text-sm focus:ring-2 focus:ring-indigo-500 outline-none" 
+                        value="${app.timeLimit}" min="0" 
+                        onchange="updateAppRule('${app.packageName}', ${app.isBlocked}, this.value)">
+                    <span class="text-xs text-gray-400">min</span>
+                </div>
             </td>
         `;
         tbody.appendChild(row);
     });
 }
 
-// Exposed to global scope for HTML inline events
+// Global function for inline events
 window.updateAppRule = async (packageName, isBlocked, timeLimit) => {
     if (!currentDevice) return;
     
@@ -250,12 +277,12 @@ window.updateAppRule = async (packageName, isBlocked, timeLimit) => {
                 deviceId: currentDevice.deviceId,
                 packageName,
                 isBlocked,
-                timeLimit: parseInt(timeLimit)
+                timeLimit: parseInt(timeLimit) || 0
             })
         });
-        // Optional: Show toast success
+        // Feedback handled by UI state persistence, no alert needed unless error
     } catch (err) {
         console.error('Failed to update rule', err);
-        alert('Failed to save change');
+        alert('Failed to save settings. Check connection.');
     }
 };
