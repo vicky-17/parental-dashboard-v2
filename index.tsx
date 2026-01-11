@@ -70,44 +70,6 @@ interface DeviceSettings {
   locationTracking: boolean;
 }
 
-// --- Mock Data (Simulating DB) ---
-
-// const MOCK_APPS: AppRule[] = [
-//   { 
-//     id: '1', appName: "TikTok", packageName: 'com.zhiliaoapp.musically', category: "Social", icon: "🎵", color: "bg-black", 
-//     isGlobalLocked: false, 
-//     schedules: [{ id: 't1', start: '18:00', end: '20:00', days: ['All'] }], 
-//     dailyUsageLimitMinutes: 60, usedTodayMinutes: 45 
-//   },
-//   { 
-//     id: '2', appName: "Roblox", packageName: 'com.roblox.client', category: "Game", icon: "🎮", color: "bg-red-500", 
-//     isGlobalLocked: true, 
-//     schedules: [], 
-//     dailyUsageLimitMinutes: 30, usedTodayMinutes: 0 
-//   },
-//   { 
-//     id: '3', appName: "Chrome", packageName: 'com.android.chrome', category: "Browser", icon: "🌐", color: "bg-blue-500", 
-//     isGlobalLocked: false, 
-//     schedules: [{ id: 't2', start: '08:00', end: '21:00', days: ['All'] }], 
-//     dailyUsageLimitMinutes: 120, usedTodayMinutes: 30 
-//   }
-// ];
-
-// const MOCK_ZONES: Zone[] = [
-//   { id: 'z1', name: 'Lincoln High School', type: 'safe', points: [{lat:0,lng:0}], alertMessage: 'Child has arrived at school.' },
-//   { id: 'z2', name: 'Downtown Construction', type: 'danger', points: [{lat:0,lng:0}], alertMessage: 'ALERT: Child entered dangerous construction zone!' }
-// ];
-
-// const MOCK_WEB: WebFilter = {
-//   blockedCategories: ['pornography', 'gambling', 'violence'],
-//   blockedUrls: ['bad-site.com', 'gambling-hub.net'],
-//   history: [
-//     { url: 'https://wikipedia.org/wiki/React', title: 'React (software) - Wikipedia', timestamp: '10:30 AM', riskScore: 0 },
-//     { url: 'https://math-solver.com', title: 'Free Algebra Solver', timestamp: '11:15 AM', riskScore: 10 },
-//     { url: 'https://sketchy-game-mods.net', title: 'Free Robux Generator', timestamp: '2:00 PM', riskScore: 85 }
-//   ]
-// };
-
 // --- Components ---
 
 const App = () => {
