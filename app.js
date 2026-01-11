@@ -319,7 +319,14 @@ async function loadApps(hardwareId) {
         // Update Dashboard Usage Stats
         const usageEl = document.getElementById('dash-total-usage');
         const usageBar = document.getElementById('dash-usage-bar');
-        if(usageEl) usageEl.textContent = `${totalMinutes}m`;
+        // Calculate hours and minutes
+        const hrs = Math.floor(totalMinutes / 60);
+        const mins = totalMinutes % 60;
+
+        // Display as "2h 15m" or just "45m" if under an hour
+        if(usageEl) {
+            usageEl.textContent = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+        }
         if(usageBar) {
             const pct = Math.min((totalMinutes / 120) * 100, 100); 
             usageBar.style.width = `${pct}%`;
