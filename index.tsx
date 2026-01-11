@@ -220,7 +220,7 @@ const DeviceList = ({ token, onSelectDevice, onLogout }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {devices.map(dev => (
             <div key={dev._id} 
-                 onClick={() => dev.isPaired && onSelectDevice(dev.deviceId)} 
+                 onClick={() => dev.isPaired && onSelectDevice(dev.deviceId || dev._id)}
                  className={`bg-white p-6 rounded-2xl border-2 transition-all group relative overflow-hidden
                     ${dev.isPaired 
                         ? 'border-transparent hover:border-indigo-500 shadow-sm hover:shadow-xl cursor-pointer' 
