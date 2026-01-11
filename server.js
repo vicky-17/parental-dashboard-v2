@@ -170,15 +170,15 @@ app.post('/api/apps', async (req, res) => {
     try {
         const { deviceId, apps } = req.body; 
         
-        // FIXED: Mapping matches Android "appName" and "minutes"
         if (apps && Array.isArray(apps)) {
             for (const app of apps) {
                 await AppRule.findOneAndUpdate(
                     { deviceId, packageName: app.packageName },
                     { 
                         $set: { 
-                            appName: app.appName, // Fixed name 
-                            usedToday: app.minutes || 0 // Fixed name
+                            appName: app.appName, 
+                            usedToday: app.minutes || 0,
+                            category: app.category || 'General' // <--- ADD THIS LINE
                         },
                         $setOnInsert: { isBlocked: false, timeLimit: 0 }
                     },
