@@ -44,7 +44,6 @@ async function initDashboard() {
             const data = await res.json();
             document.getElementById('pairing-code-display').textContent = data.code;
             document.getElementById('pairing-modal').classList.remove('hidden');
-            // Don't reload devices here immediately, wait for user to finish pairing
         } catch (err) {
             alert('Failed to generate code');
         }
@@ -79,15 +78,11 @@ async function loadDevices() {
         renderDeviceList();
         document.getElementById('device-count').textContent = devices.length;
 
-        // --- NEW: AUTO-SELECT LOGIC ---
         if (devices.length > 0) {
-            // If no device is currently selected, OR the selected one is gone
-            // Select the FIRST device (Top of the list)
             if (!currentDevice || !devices.find(d => d._id === currentDevice._id)) {
                 selectDevice(devices[0]);
             }
         } else {
-            // No devices exist at all -> Show Force Add Prompt
             showNoDevicesState();
         }
 
@@ -137,54 +132,40 @@ async function selectDevice(device) {
 
     document.getElementById('device-status-header').classList.remove('hidden');
     document.getElementById('current-device-name-header').textContent = device.name;
-    document.getElementById('active-device-name').textContent = device.name;
-
-    // Load Data
+    
+    // Initial Data Load
     if (locationInterval) clearInterval(locationInterval);
     await Promise.all([ loadLocation(device.deviceId), loadApps(device.deviceId) ]);
 
-    if (!liveMap) {
-        liveMap = L.map('liveMap').setView([20.5937, 78.9629], 5); // India default
-        
+    // Initialize Map if not already done
+    if (!liveMap && document.getElementById('liveMap')) {
+        liveMap = L.map('liveMap').setView([20.5937, 78.9629], 5); 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: '&copy; OpenStreetMap contributors'
         }).addTo(liveMap);
     }
 
-    // Live Poll (every 3s)
-    locationInterval = setInterval(() => loadLocation(device.deviceId), 3000);
+    // Start Live Polling (every 3s)
+    locationInterval = setInterval(() => {
+        if(currentDevice) loadLocation(currentDevice.deviceId);
+    }, 3000);
 }
 
 function showNoDevicesState() {
     currentDevice = null;
     if (locationInterval) clearInterval(locationInterval);
 
-    // Hide all tabs
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
     document.getElementById('device-status-header').classList.add('hidden');
-    document.getElementById('active-device-name').textContent = "No Devices";
 
-    // Show Custom Empty State
     const emptyState = document.getElementById('empty-state');
     emptyState.classList.remove('hidden');
-    emptyState.innerHTML = `
-        <div class="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mb-6">
-            <i data-lucide="smartphone" width="40" class="text-indigo-600"></i>
-        </div>
-        <h3 class="text-xl font-bold text-slate-800 mb-2">No Connected Devices</h3>
-        <p class="text-slate-500 mb-8 max-w-sm text-center">You haven't paired any devices yet. Add a child's device to start monitoring.</p>
-        <button onclick="document.getElementById('add-device-btn').click()" class="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 flex items-center gap-2">
-            <i data-lucide="plus" width="20"></i> Add New Device
-        </button>
-    `;
-    if (window.lucide) window.lucide.createIcons();
 }
 
 // --- TAB SWITCHING ---
 
 function switchTab(tabId) {
-    // 1. Update Navigation Styling (Always allow clicking tabs visually)
     document.querySelectorAll('.nav-item').forEach(el => {
         el.classList.remove('active', 'bg-indigo-50', 'text-indigo-600');
         el.classList.add('text-slate-600', 'hover:bg-slate-50');
@@ -195,20 +176,17 @@ function switchTab(tabId) {
         activeBtn.classList.remove('text-slate-600', 'hover:bg-slate-50');
     }
 
-    // 2. BLOCK CONTENT if no device exists
     if (devices.length === 0) {
         showNoDevicesState();
-        return; // Stop here, don't show tab content
+        return;
     }
 
-    // 3. Hide all tabs and Show Target
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-    document.getElementById('empty-state').classList.add('hidden'); // Hide empty state if showing tab
+    document.getElementById('empty-state').classList.add('hidden'); 
     
     const target = document.getElementById(`view-${tabId}`);
     if(target) target.classList.remove('hidden');
 
-    // 4. Update Header Title
     const titles = {
         'dashboard': 'Overview',
         'apps': 'App Rules & Usage',
@@ -217,9 +195,20 @@ function switchTab(tabId) {
         'settings': 'Device Settings'
     };
     document.getElementById('page-title').textContent = titles[tabId] || 'Dashboard';
+
+    // FIX: Resize map when tab is shown to prevent grey area
+    if (tabId === 'dashboard' && liveMap) {
+        setTimeout(() => {
+            liveMap.invalidateSize();
+            // Re-center map on last marker if available
+            if (liveMarker) {
+                liveMap.setView(liveMarker.getLatLng(), liveMap.getZoom());
+            }
+        }, 200);
+    }
 }
 
-// --- DATA FETCHING (Unchanged logic) ---
+// --- DATA FETCHING ---
 
 async function loadLocation(hardwareId) {
     try {
@@ -227,40 +216,51 @@ async function loadLocation(hardwareId) {
         const loc = await res.json();
         
         if (loc && loc.latitude) {
-
-                    if (liveMap) {
-            const pos = [loc.latitude, loc.longitude];
-
-            // Create marker once
-            if (!liveMarker) {
-                liveMarker = L.marker(pos).addTo(liveMap);
-                liveMap.setView(pos, 16); // initial zoom to location
-            } else {
-                liveMarker.setLatLng(pos);
+            // 1. UPDATE MAP
+            if (liveMap) {
+                const pos = [loc.latitude, loc.longitude];
+                if (!liveMarker) {
+                    liveMarker = L.marker(pos).addTo(liveMap);
+                    liveMap.setView(pos, 16); 
+                } else {
+                    liveMarker.setLatLng(pos);
+                    // Optional: Pan map to follow device
+                    liveMap.setView(pos, liveMap.getZoom()); 
+                }
             }
 
-            // ALWAYS auto zoom to location
-            liveMap.setView(pos, liveMap.getZoom());
-        }
-
+            // 2. UPDATE TEXT STATS (Matched to dashboard.html IDs)
             const timeStr = new Date(loc.timestamp).toLocaleTimeString();
-            const coordsStr = `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`;
             
-            // Dashboard Widget
-            const dashCoords = document.getElementById('map-coords');
-            if(dashCoords) dashCoords.textContent = coordsStr;
-            const dashTime = document.getElementById('map-time');
-            if(dashTime) dashTime.textContent = "Updated: " + timeStr;
+            const lastSync = document.getElementById('last-synced-time');
+            if(lastSync) lastSync.textContent = timeStr;
+
+            const pingEl = document.getElementById('dash-last-ping');
+            if(pingEl) pingEl.textContent = "Ping: " + timeStr;
+
+            // Battery (Fixed ID selection)
+            const batText = document.getElementById('dash-battery-text');
+            const batBar = document.getElementById('dash-battery-bar');
+            if(batText) batText.textContent = (loc.batteryLevel || 0) + '%';
+            if(batBar) batBar.style.width = (loc.batteryLevel || 0) + '%';
             
-            const bat = document.getElementById('stat-battery');
-            if(bat) bat.textContent = (loc.batteryLevel || 0) + '%';
-            
-            const mapBatText = document.getElementById('map-battery-text');
-            const mapBatBar = document.getElementById('map-battery-bar');
-            if(mapBatText) mapBatText.textContent = (loc.batteryLevel || 0) + '%';
-            if(mapBatBar) mapBatBar.style.width = (loc.batteryLevel || 0) + '%';
-            
-            document.getElementById('last-synced-time').textContent = timeStr;
+            // Coordinates
+            const latEl = document.getElementById('dash-lat');
+            const lngEl = document.getElementById('dash-lng');
+            if(latEl) latEl.textContent = loc.latitude.toFixed(4);
+            if(lngEl) lngEl.textContent = loc.longitude.toFixed(4);
+
+            // Address Placeholder
+            const addrEl = document.getElementById('dash-address');
+            if(addrEl) addrEl.textContent = `Lat: ${loc.latitude.toFixed(4)}, Lng: ${loc.longitude.toFixed(4)}`;
+
+            // Speed
+            const speedEl = document.getElementById('dash-speed');
+            if(speedEl) {
+                // Assuming speed comes from API, or default to 0
+                const speed = loc.speed || 0; 
+                speedEl.innerHTML = `${speed.toFixed(1)} <span class="text-xs text-slate-400 font-normal">mph</span>`;
+            }
         }
     } catch(e) { console.error("Loc fetch error", e); }
 }
@@ -273,9 +273,12 @@ async function loadApps(hardwareId) {
         
         tbody.innerHTML = '';
         let totalMinutes = 0;
+        let blockedCount = 0;
 
         apps.forEach(app => {
             totalMinutes += (app.usedToday || 0);
+            if(app.isBlocked) blockedCount++;
+
             const row = document.createElement('tr');
             row.className = "hover:bg-slate-50 transition-colors border-b border-slate-50";
             row.innerHTML = `
@@ -313,9 +316,20 @@ async function loadApps(hardwareId) {
             tbody.appendChild(row);
         });
 
-        const appCount = document.getElementById('stat-apps-count');
-        if(appCount) appCount.textContent = apps.length;
-        
+        // Update Dashboard Usage Stats
+        const usageEl = document.getElementById('dash-total-usage');
+        const usageBar = document.getElementById('dash-usage-bar');
+        if(usageEl) usageEl.textContent = `${totalMinutes}m`;
+        if(usageBar) {
+            const pct = Math.min((totalMinutes / 120) * 100, 100); 
+            usageBar.style.width = `${pct}%`;
+        }
+
+        const secCount = document.getElementById('dash-security-count');
+        const secText = document.getElementById('dash-security-text');
+        if(secCount) secCount.textContent = blockedCount;
+        if(secText) secText.textContent = blockedCount > 0 ? `${blockedCount} apps blocked` : "No threats detected";
+
     } catch(e) { console.error("App fetch error", e); }
 }
 
@@ -336,83 +350,3 @@ window.updateAppRule = async (packageName, isBlocked, timeLimit) => {
         console.error('Failed to update rule', err);
     }
 };
-
-
-
-
-
-
-
-function renderDashboard(loc, apps) {
-    // 1. Calculate Metrics
-    let totalMinutes = 0;
-    let blockedCount = 0;
-    
-    apps.forEach(app => {
-        totalMinutes += (app.usedToday || 0);
-        if (app.isBlocked) blockedCount++;
-    });
-
-    // 2. Update Security Card
-    const secCountEl = document.getElementById('dash-security-count');
-    const secTextEl = document.getElementById('dash-security-text');
-    if(secCountEl) secCountEl.textContent = blockedCount;
-    if(secTextEl) secTextEl.textContent = blockedCount > 0 ? "Apps currently blocked" : "No active blocks";
-
-    // 3. Update Screen Time Card
-    const usageEl = document.getElementById('dash-total-usage');
-    const usageBar = document.getElementById('dash-usage-bar');
-    if(usageEl) usageEl.textContent = `${totalMinutes}m`;
-    if(usageBar) {
-        // Assuming 120 minutes (2 hours) is the 100% mark for visual reference
-        const pct = Math.min((totalMinutes / 120) * 100, 100); 
-        usageBar.style.width = `${pct}%`;
-    }
-
-    // 4. Update System Status
-    const pingEl = document.getElementById('dash-last-ping');
-    if(pingEl && loc.timestamp) {
-        pingEl.textContent = "Ping: " + new Date(loc.timestamp).toLocaleTimeString();
-    }
-
-    // 5. Update Map & Telemetry
-    if (loc && loc.latitude) {
-
-        if (liveMap) {
-            const pos = [loc.latitude, loc.longitude];
-
-            // Create marker once
-            if (!liveMarker) {
-                liveMarker = L.marker(pos).addTo(liveMap);
-                liveMap.setView(pos, 16); // initial zoom to location
-            } else {
-                liveMarker.setLatLng(pos);
-            }
-
-            // ALWAYS auto zoom to location
-            liveMap.setView(pos, liveMap.getZoom());
-        }
-
-        // Battery
-        document.getElementById('dash-battery-text').textContent = (loc.batteryLevel || 0) + '%';
-        document.getElementById('dash-battery-bar').style.width = (loc.batteryLevel || 0) + '%';
-        
-        // Coords
-        document.getElementById('dash-lat').textContent = loc.latitude.toFixed(4);
-        document.getElementById('dash-lng').textContent = loc.longitude.toFixed(4);
-        
-        // Speed (Mocking it for now as loc.speed might not exist yet)
-        const speed = loc.speed || 0;
-        document.getElementById('dash-speed').innerHTML = `${speed.toFixed(1)} <span class="text-xs text-slate-400 font-normal">mph</span>`;
-        document.getElementById('map-status-tag').textContent = `Live • ${speed.toFixed(1)} mph`;
-
-        // Address (Placeholder - Requires Reverse Geocoding API in real app)
-        // For now, we show a clean formatted string of coords
-        document.getElementById('dash-address').textContent = `Near ${loc.latitude.toFixed(3)}, ${loc.longitude.toFixed(3)}`;
-    }
-}
-
-
-
-
-
