@@ -310,18 +310,26 @@ function renderAppGrid() {
     }
 
     currentApps.forEach((app, index) => {
-        // Determine Card State
+        // Logic: Determine State
         const isLocked = app.isGlobalLocked === true;
         const hasSchedules = app.schedules && app.schedules.length > 0;
         
-        // Dynamic Card Styles
-        let cardClasses = "relative bg-white rounded-xl border-2 transition-all overflow-hidden";
-        if (isLocked) {
-            cardClasses += " border-red-200 shadow-sm shadow-red-50";
-        } else if (hasSchedules) {
-            cardClasses += " border-orange-200 shadow-sm shadow-orange-50";
+        let cardClasses = "relative rounded-xl border-2 transition-all overflow-hidden ";
+        let statusBadge = "";
+        
+        // 1. Determine Colors & Status
+        if (!isLocked) {
+            // GREEN: Unlocked / Safe
+            cardClasses += "bg-green-50 border-green-200 hover:border-green-300";
+            statusBadge = `<span class="text-green-700 text-xs font-bold uppercase tracking-wider">Unlocked</span>`;
+        } else if (isLocked && !hasSchedules) {
+            // RED: Locked completely (No schedule)
+            cardClasses += "bg-red-50 border-red-200 shadow-sm shadow-red-100";
+            statusBadge = `<div class="bg-red-500 text-white px-3 py-1 text-[10px] font-bold uppercase tracking-wide rounded-full flex items-center gap-1"><i data-lucide="lock" width="10"></i> Locked</div>`;
         } else {
-            cardClasses += " border-slate-100 hover:border-slate-200";
+            // ORANGE: Locked but has Schedule
+            cardClasses += "bg-orange-50 border-orange-200 shadow-sm shadow-orange-100";
+            statusBadge = `<div class="bg-orange-500 text-white px-3 py-1 text-[10px] font-bold uppercase tracking-wide rounded-full flex items-center gap-1"><i data-lucide="clock" width="10"></i> Scheduled</div>`;
         }
 
         const appColor = getAppColor(app.appName);
@@ -329,13 +337,6 @@ function renderAppGrid() {
         // HTML Construction
         const cardHTML = `
             <div class="${cardClasses}">
-                
-                ${isLocked ? `
-                    <div class="bg-red-50 text-red-700 px-4 py-1 text-[10px] font-bold uppercase tracking-wide flex items-center gap-2 border-b border-red-100">
-                        <i data-lucide="lock" width="10"></i> Global Lock Active
-                    </div>
-                ` : ''}
-
                 <div class="p-5">
                     <div class="flex flex-col md:flex-row justify-between gap-4">
                         
@@ -345,58 +346,65 @@ function renderAppGrid() {
                             </div>
                             <div>
                                 <h4 class="font-bold text-slate-900 text-lg leading-tight">${app.appName || app.packageName}</h4>
-                                <p class="text-xs text-slate-500 font-medium mb-1">${app.category || 'General'}</p>
-                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-600">
-                                    Used: ${app.usedToday || 0}m <span class="text-slate-300">|</span> Limit: ${app.dailyLimit || '∞'}m
-                                </span>
+                                <div class="flex items-center gap-2 mt-1">
+                                    ${statusBadge}
+                                    <span class="text-xs text-slate-500 font-medium">| Used: ${app.usedToday || 0}m</span>
+                                </div>
                             </div>
                         </div>
 
                         <button onclick="window.toggleAppLock('${index}')" 
-                            class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm h-10
+                            class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm h-10 shrink-0
                             ${isLocked 
-                                ? 'bg-red-600 text-white hover:bg-red-700 shadow-red-200' 
-                                : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'
+                                ? 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50' 
+                                : 'bg-green-600 text-white hover:bg-green-700 border border-green-600'
                             }">
-                            <i data-lucide="${isLocked ? 'lock' : 'unlock'}" width="16"></i>
-                            <span>${isLocked ? 'Locked Always' : 'Unlocked'}</span>
+                            <i data-lucide="${isLocked ? 'unlock' : 'lock'}" width="16"></i>
+                            <span>${isLocked ? 'Unlock' : 'Lock App'}</span>
                         </button>
                     </div>
 
-                    ${!isLocked ? `
-                        <div class="mt-6 pt-4 border-t border-slate-100">
+                    ${isLocked ? `
+                        <div class="mt-6 pt-4 border-t ${hasSchedules ? 'border-orange-200' : 'border-red-200'}">
+                            
+                            ${!hasSchedules ? `
+                                <div class="flex items-center justify-between">
+                                    <p class="text-xs text-red-600 italic">App is completely blocked.</p>
+                                    <button onclick="window.addSchedule('${index}')" class="text-xs font-bold bg-white border border-red-200 text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 shadow-sm">
+                                        <i data-lucide="plus" width="12"></i> Add Schedule
+                                    </button>
+                                </div>
+                            ` : `
+                            
                             <div class="flex items-center justify-between mb-3">
-                                <h5 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                                    <i data-lucide="clock" width="12" class="text-orange-500"></i> Allowed Schedules
-                                </h5>
-                                <button onclick="window.addSchedule('${index}')" class="text-xs font-bold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 px-2 py-1 rounded transition-colors flex items-center gap-1">
-                                    <i data-lucide="plus" width="12"></i> Add Slot
-                                </button>
-                            </div>
+                                    <h5 class="text-xs font-bold text-orange-700 uppercase tracking-wider flex items-center gap-1.5">
+                                        Active Schedules
+                                    </h5>
+                                    <button onclick="window.addSchedule('${index}')" class="text-xs font-bold text-orange-600 hover:bg-orange-100 px-2 py-1 rounded transition-colors flex items-center gap-1">
+                                        <i data-lucide="plus" width="12"></i> Add Slot
+                                    </button>
+                                </div>
 
-                            <div class="space-y-2">
-                                ${(!app.schedules || app.schedules.length === 0) ? 
-                                    `<p class="text-xs text-slate-400 italic py-2">No specific schedules. App is allowed until daily limit is reached.</p>` 
-                                    : 
-                                    app.schedules.map(slot => `
-                                        <div class="flex items-center gap-2 bg-orange-50/50 border border-orange-100 p-2 rounded-lg">
-                                            <span class="text-[10px] font-bold text-orange-600 uppercase bg-white px-1.5 py-0.5 rounded border border-orange-100">Everyday</span>
+                                <div class="space-y-2">
+                                    ${app.schedules.map(slot => `
+                                        <div class="flex items-center gap-2 bg-white border border-orange-200 p-2 rounded-lg shadow-sm">
+                                            <span class="text-[10px] font-bold text-orange-600 uppercase bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100">Everyday</span>
                                             <div class="flex-1 flex items-center gap-2">
                                                 <input type="time" value="${slot.start}" 
                                                     onchange="window.saveSchedule('${index}', '${slot.id}', 'start', this.value)"
-                                                    class="bg-white border border-slate-200 rounded text-xs px-1 py-1 text-slate-600 w-full focus:border-orange-400 outline-none">
+                                                    class="bg-slate-50 border border-slate-200 rounded text-xs px-2 py-1 text-slate-700 w-full focus:border-orange-500 focus:bg-white outline-none transition-colors">
                                                 <span class="text-slate-300">-</span>
                                                 <input type="time" value="${slot.end}" 
                                                     onchange="window.saveSchedule('${index}', '${slot.id}', 'end', this.value)"
-                                                    class="bg-white border border-slate-200 rounded text-xs px-1 py-1 text-slate-600 w-full focus:border-orange-400 outline-none">
+                                                    class="bg-slate-50 border border-slate-200 rounded text-xs px-2 py-1 text-slate-700 w-full focus:border-orange-500 focus:bg-white outline-none transition-colors">
                                             </div>
-                                            <button onclick="window.removeSchedule('${index}', '${slot.id}')" class="text-orange-300 hover:text-red-500 transition-colors p-1">
+                                            <button onclick="window.removeSchedule('${index}', '${slot.id}')" class="text-slate-400 hover:text-red-500 transition-colors p-1.5 hover:bg-red-50 rounded-md">
                                                 <i data-lucide="trash-2" width="14"></i>
                                             </button>
                                         </div>
-                                    `).join('')
-                                }
-                            </div>
+                                    `).join('')}
+                                </div>
+                            `}
                         </div>
                     ` : ''}
                 </div>
