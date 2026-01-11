@@ -5,6 +5,8 @@ const API_URL = '/api';
 let currentDevice = null;
 let devices = [];
 let locationInterval = null;
+let map = null;
+let marker = null;
 
 // --- INIT ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -15,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.location.href = 'index.html'; 
     } else if (token) {
         initDashboard();
+        initMap();
     }
 
     const sidebar = document.getElementById('sidebar');
@@ -206,6 +209,46 @@ function switchTab(tabId) {
     document.getElementById('page-title').textContent = titles[tabId] || 'Dashboard';
 }
 
+// --- MAP LOGIC ---
+function initMap() {
+    // Initialize map centered on world (will zoom to child later)
+    map = L.map('map', { zoomControl: false }).setView([20, 0], 2);
+    
+    // Add Free OpenStreetMap Tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+    
+    // Move Zoom controls to bottom right
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+}
+
+function updateMap(lat, lng) {
+    if (!map) return;
+
+    // Custom Icon: Small Dot + Label Text
+    const customIcon = L.divIcon({
+        className: 'custom-pin',
+        html: `
+            <div style="position: relative;">
+                <div class="pin-dot"></div>
+                <div class="pin-label">Child</div>
+            </div>
+        `,
+        iconSize: [12, 12],
+        iconAnchor: [6, 6] // Center the dot
+    });
+
+    if (marker) {
+        marker.setLatLng([lat, lng]);
+    } else {
+        marker = L.marker([lat, lng], { icon: customIcon }).addTo(map);
+    }
+
+    // Zoom to exact location (Level 16 is street view)
+    map.setView([lat, lng], 16);
+}
+
 // --- DATA FETCHING (Unchanged logic) ---
 
 async function loadLocation(hardwareId) {
@@ -214,6 +257,7 @@ async function loadLocation(hardwareId) {
         const loc = await res.json();
         
         if (loc && loc.latitude) {
+            updateMap(loc.latitude, loc.longitude);
             const timeStr = new Date(loc.timestamp).toLocaleTimeString();
             const coordsStr = `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`;
             
@@ -314,8 +358,7 @@ window.updateAppRule = async (packageName, isBlocked, timeLimit) => {
 
 
 
-function renderDashboard(loc, apps) {
-    // 1. Calculate Metrics
+function renderDashboard(apps) {
     let totalMinutes = 0;
     let blockedCount = 0;
     
@@ -324,46 +367,20 @@ function renderDashboard(loc, apps) {
         if (app.isBlocked) blockedCount++;
     });
 
-    // 2. Update Security Card
-    const secCountEl = document.getElementById('dash-security-count');
-    const secTextEl = document.getElementById('dash-security-text');
-    if(secCountEl) secCountEl.textContent = blockedCount;
-    if(secTextEl) secTextEl.textContent = blockedCount > 0 ? "Apps currently blocked" : "No active blocks";
+    // 1. Security Card
+    const secCount = document.getElementById('dash-security-count');
+    const secText = document.getElementById('dash-security-text');
+    if (secCount) secCount.textContent = blockedCount;
+    if (secText) secText.textContent = blockedCount > 0 ? `${blockedCount} apps blocked` : "No threats detected";
 
-    // 3. Update Screen Time Card
+    // 2. Screen Time Card
     const usageEl = document.getElementById('dash-total-usage');
     const usageBar = document.getElementById('dash-usage-bar');
-    if(usageEl) usageEl.textContent = `${totalMinutes}m`;
-    if(usageBar) {
-        // Assuming 120 minutes (2 hours) is the 100% mark for visual reference
+    if (usageEl) usageEl.textContent = `${totalMinutes}m`;
+    if (usageBar) {
+        // Calculate percentage (Assuming 2 hours / 120m limit)
         const pct = Math.min((totalMinutes / 120) * 100, 100); 
         usageBar.style.width = `${pct}%`;
-    }
-
-    // 4. Update System Status
-    const pingEl = document.getElementById('dash-last-ping');
-    if(pingEl && loc.timestamp) {
-        pingEl.textContent = "Ping: " + new Date(loc.timestamp).toLocaleTimeString();
-    }
-
-    // 5. Update Map & Telemetry
-    if (loc && loc.latitude) {
-        // Battery
-        document.getElementById('dash-battery-text').textContent = (loc.batteryLevel || 0) + '%';
-        document.getElementById('dash-battery-bar').style.width = (loc.batteryLevel || 0) + '%';
-        
-        // Coords
-        document.getElementById('dash-lat').textContent = loc.latitude.toFixed(4);
-        document.getElementById('dash-lng').textContent = loc.longitude.toFixed(4);
-        
-        // Speed (Mocking it for now as loc.speed might not exist yet)
-        const speed = loc.speed || 0;
-        document.getElementById('dash-speed').innerHTML = `${speed.toFixed(1)} <span class="text-xs text-slate-400 font-normal">mph</span>`;
-        document.getElementById('map-status-tag').textContent = `Live • ${speed.toFixed(1)} mph`;
-
-        // Address (Placeholder - Requires Reverse Geocoding API in real app)
-        // For now, we show a clean formatted string of coords
-        document.getElementById('dash-address').textContent = `Near ${loc.latitude.toFixed(3)}, ${loc.longitude.toFixed(3)}`;
     }
 }
 
