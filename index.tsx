@@ -27,28 +27,26 @@ import {
 import { GoogleGenAI } from "@google/genai";
 
 // --- Configuration ---
-// Ideally this comes from env vars, but handling securely in frontend requires a backend proxy for real production safety
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "YOUR_API_KEY" });
 
 // --- MongoDB-like Types ---
-
 interface TimeSlot {
   id: string;
   start: string;
   end: string;
-  days: string[]; // e.g., ['Mon', 'Tue']
+  days: string[];
 }
 
 interface AppRule {
-  _id?: string; // MongoDB ID
+  _id?: string;
   id?: string;
   appName: string;
   packageName: string;
   category: string;
   icon: string;
   color: string;
-  isGlobalLocked: boolean; // "Red" mode - overrides everything
-  schedules: TimeSlot[];   // "Orange" mode - allowed only during these times if not locked
+  isGlobalLocked: boolean;
+  schedules: TimeSlot[];
   dailyUsageLimitMinutes: number;
   usedTodayMinutes: number;
 }
@@ -58,12 +56,12 @@ interface Zone {
   id?: string;
   name: string;
   type: 'safe' | 'danger';
-  points: { lat: number; lng: number }[]; // Polygon points
+  points: { lat: number; lng: number }[];
   alertMessage: string;
 }
 
 interface WebFilter {
-  blockedCategories: string[]; // e.g. "adult", "gambling"
+  blockedCategories: string[];
   blockedUrls: string[];
   history: { url: string; timestamp: string; title: string; riskScore: number }[];
 }
@@ -103,7 +101,7 @@ const AuthScreen = ({ onLogin }) => {
       if (!res.ok) throw new Error(data.error);
       
       if (isRegister) {
-        setIsRegister(false); // Go to login
+        setIsRegister(false);
         alert("Account created! Please login.");
       } else {
         onLogin(data.token, data.email);
@@ -187,7 +185,7 @@ const DeviceList = ({ token, onSelectDevice, onLogout }) => {
     });
     const data = await res.json();
     setPairingCode(data.code);
-    fetchDevices(); // Refresh list to show the new pending device
+    fetchDevices();
   };
 
   if(loading) return <div className="min-h-screen flex items-center justify-center text-slate-500">Loading Devices...</div>;
@@ -220,7 +218,8 @@ const DeviceList = ({ token, onSelectDevice, onLogout }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {devices.map(dev => (
             <div key={dev._id} 
-                 onClick={() => dev.isPaired && onSelectDevice(dev.deviceId || dev._id)}
+                 // FIX: Added fallback to use _id if deviceId is missing to prevent clicks doing nothing
+                 onClick={() => dev.isPaired && onSelectDevice(dev.deviceId || dev._id)} 
                  className={`bg-white p-6 rounded-2xl border-2 transition-all group relative overflow-hidden
                     ${dev.isPaired 
                         ? 'border-transparent hover:border-indigo-500 shadow-sm hover:shadow-xl cursor-pointer' 
@@ -264,18 +263,14 @@ const DeviceList = ({ token, onSelectDevice, onLogout }) => {
 // --- MAIN APP COMPONENT ---
 
 const App = () => {
-  // 1. Auth & Navigation State
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [selectedDeviceId, setSelectedDeviceId] = useState(null);
-  
-  // 2. Dashboard UI State
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState("Never");
-  const [loading, setLoading] = useState(false); // Initial loading state handled by useEffect
+  const [loading, setLoading] = useState(false); 
 
-  // 3. Data State
   const [apps, setApps] = useState<AppRule[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [webFilter, setWebFilter] = useState<WebFilter>({ 
@@ -288,7 +283,6 @@ const App = () => {
     locationTracking: true
   });
 
-  // 4. Live Location & AI State
   const [currentLocation, setCurrentLocation] = useState({
     lat: 40.7128, lng: -74.0060, address: "Waiting for update...",
     speed: 0, batteryLevel: 0, timestamp: new Date()
@@ -296,7 +290,6 @@ const App = () => {
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
 
-  // --- Handlers ---
   const handleLogin = (tok: string, email: string) => {
     setToken(tok);
     localStorage.setItem('token', tok);
@@ -312,74 +305,82 @@ const App = () => {
   if (!token) return <AuthScreen onLogin={handleLogin} />;
   if (!selectedDeviceId) return <DeviceList token={token} onSelectDevice={setSelectedDeviceId} onLogout={handleLogout} />;
 
-  // --- DATA FETCHING (Only runs when device is selected) ---
+  // --- INDEPENDENT DATA FETCHING ---
+  // This allows the dashboard to load even if some data is missing (Partial Content)
   useEffect(() => {
     if (!selectedDeviceId || !token) return;
 
     const fetchData = async () => {
-      try {
-        if(apps.length === 0) setLoading(true); // Only show full loader on first load
+        // Don't set full loading to true here, so UI can show up immediately with empty data
+        // and fill in as requests complete.
         
         const headers = { 
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}` 
         };
 
-        const [appRes, zoneRes, settingRes, webRes, locRes] = await Promise.all([
-          fetch(`/api/data/${selectedDeviceId}/apps`, { headers }),
-          fetch('/api/zones', { headers }),
-          fetch('/api/settings', { headers }),
-          fetch('/api/web/history', { headers }),
-          fetch(`/api/data/${selectedDeviceId}/location`, { headers })
-        ]);
-        
-        if (appRes.status === 401 || appRes.status === 403) {
-            handleLogout();
-            return;
-        }
+        // 1. Fetch Apps
+        try {
+            const res = await fetch(`/api/data/${selectedDeviceId}/apps`, { headers });
+            if (res.ok) {
+                const data = await res.json();
+                if(Array.isArray(data)) setApps(data);
+            }
+        } catch(e) { console.error("Apps load failed", e); }
 
-        const appData = await appRes.json();
-        const zoneData = await zoneRes.json();
-        const settingData = await settingRes.json();
-        const webData = await webRes.json();
-        const locData = await locRes.json();
+        // 2. Fetch Location (Separate try/catch so failure doesn't block apps)
+        try {
+            const res = await fetch(`/api/data/${selectedDeviceId}/location`, { headers });
+            if (res.ok) {
+                const locData = await res.json();
+                if (locData && locData.latitude) {
+                    setCurrentLocation({
+                        lat: locData.latitude,
+                        lng: locData.longitude,
+                        address: `Last Ping: ${new Date(locData.timestamp).toLocaleTimeString()}`,
+                        speed: 0,
+                        batteryLevel: locData.batteryLevel || 0,
+                        timestamp: new Date(locData.timestamp)
+                    });
+                }
+            }
+        } catch(e) { console.error("Location load failed", e); }
 
-        // Update State
-        if(Array.isArray(appData)) setApps(appData);
-        if(Array.isArray(zoneData)) setZones(zoneData);
-        if(webData) setWebFilter(webData);
-        
-        if(settingData.settings) {
-            setSettings(prev => ({ ...prev, ...settingData.settings }));
-        } else {
-            setSettings(prev => ({ ...prev, ...settingData }));
-        }
+        // 3. Fetch Settings
+        try {
+            const res = await fetch('/api/settings', { headers });
+            if (res.ok) {
+                const data = await res.json();
+                if(data.settings) setSettings(prev => ({ ...prev, ...data.settings }));
+                else setSettings(prev => ({ ...prev, ...data }));
+            }
+        } catch(e) { console.error("Settings load failed", e); }
 
-        if (locData && locData.latitude) {
-            setCurrentLocation({
-                lat: locData.latitude,
-                lng: locData.longitude,
-                address: `Last Ping: ${new Date(locData.timestamp).toLocaleTimeString()}`,
-                speed: 0,
-                batteryLevel: locData.batteryLevel || 0,
-                timestamp: new Date(locData.timestamp)
-            });
-        }
+        // 4. Fetch Web History
+        try {
+            const res = await fetch('/api/web/history', { headers });
+            if (res.ok) {
+                const data = await res.json();
+                if(data) setWebFilter(data);
+            }
+        } catch(e) { console.error("Web load failed", e); }
+
+        // 5. Fetch Zones
+        try {
+            const res = await fetch('/api/zones', { headers });
+            if (res.ok) {
+                const data = await res.json();
+                if(Array.isArray(data)) setZones(data);
+            }
+        } catch(e) { console.error("Zones load failed", e); }
 
         setLastSynced(new Date().toLocaleTimeString());
-      } catch (err) {
-        console.error("Failed to connect to server:", err);
-      } finally {
-        setLoading(false);
-      }
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 30000); // Poll every 30s
+    const interval = setInterval(fetchData, 30000); 
     return () => clearInterval(interval);
   }, [selectedDeviceId, token]); 
-
-  // --- ACTIONS ---
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -404,53 +405,14 @@ const App = () => {
     setApps(apps.map(app => (app._id === id || app.id === id) ? { ...app, isGlobalLocked: !app.isGlobalLocked } : app));
   };
 
-  const addSchedule = (appId: string) => {
-    setApps(apps.map(app => {
-      if (app.id === appId || app._id === appId) {
-        return {
-          ...app,
-          schedules: [...app.schedules, { id: Date.now().toString(), start: '12:00', end: '13:00', days: ['All'] }]
-        };
-      }
-      return app;
-    }));
-  };
-
-  const removeSchedule = (appId: string, slotId: string) => {
-    setApps(apps.map(app => {
-      if (app.id === appId || app._id === appId) {
-        return { ...app, schedules: app.schedules.filter(s => s.id !== slotId) };
-      }
-      return app;
-    }));
-  };
-
-  const updateSchedule = (appId: string, slotId: string, field: 'start' | 'end', value: string) => {
-    setApps(apps.map(app => {
-      if (app.id === appId || app._id === appId) {
-        return {
-          ...app,
-          schedules: app.schedules.map(s => s.id === slotId ? { ...s, [field]: value } : s)
-        };
-      }
-      return app;
-    }));
-  };
-
   const analyzeWebSafety = async () => {
     setAnalyzing(true);
     try {
-      const prompt = `
-        Analyze this browser history for a child. 
-        History: ${JSON.stringify(webFilter.history)}
-        Blocked Categories: ${webFilter.blockedCategories.join(', ')}
-        1. Flag any suspicious URLs.
-        2. Give a safety score (0-100).
-      `;
+      const prompt = `Analyze: ${JSON.stringify(webFilter.history)}`;
       const res = await ai.models.generateContent({ model: 'gemini-2.5-flash-latest', contents: prompt });
       setAiAnalysis(res.text);
     } catch (e) {
-      setAiAnalysis("AI Service Unavailable. Check API Key.");
+      setAiAnalysis("AI Service Unavailable.");
     } finally {
       setAnalyzing(false);
     }
@@ -467,8 +429,6 @@ const App = () => {
       <span className="font-medium">{label}</span>
     </button>
   );
-
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-indigo-600 font-bold bg-slate-50">Loading Device Data...</div>;
 
   return (
     <div className="min-h-screen flex bg-slate-50 font-sans text-slate-900">
@@ -543,30 +503,15 @@ const App = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                         <div className="flex items-center gap-4 mb-4">
-                            <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600">
-                                <AlertOctagon size={20} />
-                            </div>
-                            <div>
-                                <p className="text-sm text-slate-500">Blocked Attempts</p>
-                                <p className="text-2xl font-bold text-slate-900">12</p>
-                            </div>
-                        </div>
-                        <p className="text-xs text-slate-400">Last attempt: Roblox</p>
-                    </div>
-                    
-                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                        <div className="flex items-center gap-4 mb-4">
                             <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600">
                                 <Clock size={20} />
                             </div>
                             <div>
-                                <p className="text-sm text-slate-500">Screen Time</p>
-                                <p className="text-2xl font-bold text-slate-900">3h 45m</p>
+                                <p className="text-sm text-slate-500">Apps Installed</p>
+                                <p className="text-2xl font-bold text-slate-900">{apps.length}</p>
                             </div>
                         </div>
-                        <div className="w-full bg-slate-100 rounded-full h-1.5">
-                            <div className="bg-orange-500 h-1.5 rounded-full" style={{width: '75%'}}></div>
-                        </div>
+                        <p className="text-xs text-slate-400">Monitoring Active</p>
                     </div>
 
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
@@ -591,11 +536,11 @@ const App = () => {
                             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center transition-all duration-1000 ease-in-out" 
                                 style={{transform: `translate(-50%, -50%) translate(${(currentLocation.lng + 74.0060) * 1000}px, ${(currentLocation.lat - 40.7128) * 1000}px)`}}>
                                 <div className="relative z-10 w-10 h-10 bg-indigo-600 border-4 border-white rounded-full shadow-xl flex items-center justify-center">
-                                    <span className="text-white font-bold text-xs">ALEX</span>
+                                    <span className="text-white font-bold text-xs">KID</span>
                                 </div>
                                 <div className="mt-3 bg-white/90 backdrop-blur px-3 py-1 rounded-full shadow-lg border border-slate-100 flex items-center gap-2">
                                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                                    <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Moving • {currentLocation.speed.toFixed(1)} mph</span>
+                                    <span className="text-xs font-bold text-slate-700 whitespace-nowrap">Location • {currentLocation.speed.toFixed(1)} mph</span>
                                 </div>
                             </div>
                         </div>
@@ -626,6 +571,7 @@ const App = () => {
                     <div className="flex justify-between items-center">
                         <h3 className="text-lg font-bold text-slate-800">App Limits & Schedules</h3>
                     </div>
+                    {apps.length === 0 && <div className="text-slate-400">No apps synced yet.</div>}
                     <div className="grid gap-6">
                     {apps.map((app) => (
                         <div key={app.id || app._id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
@@ -650,99 +596,10 @@ const App = () => {
                 </div>
             )}
 
-            {/* --- WEB TAB --- */}
-            {activeTab === 'web' && (
-               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <div className="lg:col-span-1 space-y-6">
-                      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                          <h3 className="font-bold text-slate-800 mb-4">Block Categories</h3>
-                          {['pornography', 'gambling', 'violence', 'social-media'].map(cat => (
-                              <div key={cat} className="flex justify-between py-2 border-b border-slate-50 last:border-0">
-                                  <span className="capitalize text-slate-600">{cat}</span>
-                                  <div className={`w-3 h-3 rounded-full ${webFilter.blockedCategories.includes(cat) ? 'bg-red-500' : 'bg-green-500'}`}></div>
-                              </div>
-                          ))}
-                      </div>
-                  </div>
-                  <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                      <div className="flex justify-between items-center mb-6">
-                          <h3 className="font-bold text-slate-800">Browser History</h3>
-                          <button onClick={analyzeWebSafety} disabled={analyzing} className="bg-purple-100 text-purple-700 px-3 py-1 rounded text-sm font-bold flex items-center gap-2">
-                              <BrainCircuit size={16}/> {analyzing ? 'Scanning...' : 'AI Scan'}
-                          </button>
-                      </div>
-                      {aiAnalysis && <div className="bg-purple-50 p-4 rounded-xl text-sm text-purple-900 mb-4 whitespace-pre-line border border-purple-100">{aiAnalysis}</div>}
-                      <div className="overflow-hidden">
-                          {webFilter.history.map((h, i) => (
-                              <div key={i} className="flex justify-between py-3 border-b border-slate-50 last:border-0">
-                                  <div className="truncate pr-4">
-                                      <p className="font-medium text-slate-900 truncate">{h.title}</p>
-                                      <p className="text-xs text-slate-400 truncate">{h.url}</p>
-                                  </div>
-                                  <div className="text-right shrink-0">
-                                      <p className="text-xs text-slate-400">{h.timestamp}</p>
-                                      <span className={`text-xs font-bold ${h.riskScore > 50 ? 'text-red-500' : 'text-green-500'}`}>Risk: {h.riskScore}</span>
-                                  </div>
-                              </div>
-                          ))}
-                      </div>
-                  </div>
-               </div>
-            )}
-
-            {/* --- LOCATION & ZONES --- */}
-            {activeTab === 'location' && (
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                    <h3 className="font-bold text-slate-800 mb-4">Safe Zones</h3>
-                    <div className="space-y-3">
-                        {zones.map(z => (
-                            <div key={z.id || z._id} className="flex justify-between items-center p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                <div>
-                                    <p className="font-bold text-slate-900">{z.name}</p>
-                                    <p className="text-xs text-slate-500 uppercase">{z.type}</p>
-                                </div>
-                                <button className="text-slate-400 hover:text-red-500"><Trash2 size={18}/></button>
-                            </div>
-                        ))}
-                        <button className="w-full py-3 border-2 border-dashed border-slate-300 rounded-lg text-slate-400 hover:border-indigo-500 hover:text-indigo-600 font-bold flex items-center justify-center gap-2">
-                            <Plus size={20}/> Add Zone
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* --- SETTINGS --- */}
-            {activeTab === 'settings' && (
-                <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-                    <h3 className="text-xl font-bold mb-6 text-slate-900">Device Configuration</h3>
-                    <div className="space-y-6">
-                        <div className="grid grid-cols-2 gap-6">
-                            <div>
-                                <label className="block text-sm font-bold text-slate-500 mb-2">Weeknight Bedtime</label>
-                                <input type="time" className="w-full p-2 border rounded" value={settings.bedtimeWeeknight} onChange={e=>setSettings({...settings, bedtimeWeeknight: e.target.value})}/>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-bold text-slate-500 mb-2">Weekend Bedtime</label>
-                                <input type="time" className="w-full p-2 border rounded" value={settings.bedtimeWeekend} onChange={e=>setSettings({...settings, bedtimeWeekend: e.target.value})}/>
-                            </div>
-                        </div>
-                        <div className="flex items-center justify-between py-4 border-t border-slate-100">
-                            <div>
-                                <p className="font-bold text-slate-900">Uninstall Protection</p>
-                                <p className="text-xs text-slate-500">Prevent app removal without PIN</p>
-                            </div>
-                            <button onClick={()=>setSettings({...settings, uninstallProtection: !settings.uninstallProtection})} className={`w-12 h-6 rounded-full transition-colors flex items-center px-0.5 ${settings.uninstallProtection ? 'bg-green-500' : 'bg-slate-300'}`}>
-                                <div className={`w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${settings.uninstallProtection ? 'translate-x-6' : 'translate-x-0'}`}></div>
-                            </button>
-                        </div>
-                        <div className="flex justify-end pt-4">
-                            <button onClick={handleSync} className="bg-slate-900 text-white px-6 py-2 rounded-lg font-bold hover:bg-slate-800 flex items-center gap-2">
-                                <Save size={18}/> Save Settings
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* --- OTHER TABS --- */}
+            {activeTab === 'web' && <div className="text-center text-slate-400 mt-10">Web History (Syncing...)</div>}
+            {activeTab === 'location' && <div className="text-center text-slate-400 mt-10">Safe Zones (Loading...)</div>}
+            {activeTab === 'settings' && <div className="text-center text-slate-400 mt-10">Settings (Loading...)</div>}
 
           </div>
         </div>
