@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ParentGuard Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-gray-50 text-gray-900 h-screen flex overflow-hidden">
+    
+    <!-- Sidebar -->
+    <aside class="w-64 bg-white border-r border-gray-200 flex flex-col">
+        <div class="h-16 flex items-center px-6 border-b border-gray-200">
+            <i data-lucide="shield-check" class="text-indigo-600 mr-2"></i>
+            <span class="font-bold text-xl text-gray-800">ParentGuard</span>
+        </div>
+        
+        <div class="p-4">
+            <button id="add-device-btn" class="w-full flex items-center justify-center gap-2 bg-indigo-50 text-indigo-700 p-2 rounded-lg hover:bg-indigo-100 transition-colors font-medium border border-indigo-100">
+                <i data-lucide="plus" size="18"></i> Add Device
+            </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto px-4 pb-4">
+            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">My Devices</h3>
+            <ul id="device-list" class="space-y-1">
+                <!-- Devices injected here -->
+            </ul>
+        </div>
+
+        <div class="p-4 border-t border-gray-200">
+            <button id="logout-btn" class="flex items-center text-gray-600 hover:text-red-600 transition-colors text-sm font-medium">
+                <i data-lucide="log-out" size="18" class="mr-2"></i> Logout
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col overflow-hidden relative">
+        <!-- Top Navigation / Device Header -->
+        <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 shadow-sm z-10">
+            <div id="device-header" class="hidden">
+                <h2 id="current-device-name" class="text-xl font-bold text-gray-800">Select a Device</h2>
+                <span id="current-device-status" class="text-sm text-green-500 flex items-center gap-1">
+                    <span class="w-2 h-2 bg-green-500 rounded-full inline-block"></span> Online
+                </span>
+            </div>
+            <div id="empty-header" class="text-gray-400 italic">Select a device to manage</div>
+            
+            <div class="flex items-center gap-4">
+               <div id="pairing-modal" class="hidden absolute top-20 right-8 bg-white p-6 rounded-xl shadow-2xl border border-indigo-100 w-80 z-50 animate-fade-in">
+                   <h3 class="text-lg font-bold text-indigo-900 mb-2">New Pairing Code</h3>
+                   <div id="pairing-code-display" class="text-4xl font-mono text-center font-bold text-indigo-600 bg-indigo-50 py-4 rounded-lg mb-2 tracking-widest">
+                       ------
+                   </div>
+                   <p class="text-xs text-gray-500 mb-4 text-center">Enter this code on the child app.</p>
+                   <button onclick="document.getElementById('pairing-modal').classList.add('hidden')" class="text-sm w-full text-center text-gray-400 hover:text-gray-600">Close</button>
+               </div>
+            </div>
+        </header>
+
+        <!-- Dashboard Content -->
+        <div id="dashboard-content" class="flex-1 overflow-y-auto p-8 hidden">
+            
+            <!-- Location Section -->
+            <section class="mb-8">
+                <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <i data-lucide="map-pin" class="text-indigo-500"></i> Location
+                </h3>
+                <div class="card p-6 flex items-center justify-between bg-white">
+                    <div>
+                        <div class="text-sm text-gray-500 mb-1">Last Coordinates</div>
+                        <div id="location-coords" class="text-xl font-mono font-medium text-gray-800">--.----, --.----</div>
+                        <div id="location-time" class="text-xs text-gray-400 mt-2">Updated: Just now</div>
+                    </div>
+                    <a id="maps-link" href="#" target="_blank" class="btn-secondary flex items-center gap-2">
+                        Open Maps <i data-lucide="external-link" size="16"></i>
+                    </a>
+                </div>
+            </section>
+
+            <!-- Apps Section -->
+            <section>
+                <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <i data-lucide="grid" class="text-indigo-500"></i> App Rules
+                </h3>
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <table class="w-full text-left">
+                        <thead class="bg-gray-50 border-b border-gray-200 text-xs uppercase text-gray-500 font-semibold">
+                            <tr>
+                                <th class="px-6 py-4">App Name</th>
+                                <th class="px-6 py-4">Usage Today</th>
+                                <th class="px-6 py-4 text-center">Block</th>
+                                <th class="px-6 py-4">Daily Limit (min)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="app-list-body" class="divide-y divide-gray-100">
+                            <!-- Apps injected here -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <!-- Empty State -->
+        <div id="empty-state" class="flex-1 flex flex-col items-center justify-center text-gray-400">
+            <i data-lucide="smartphone" size="64" class="mb-4 opacity-20"></i>
+            <p>Select a device from the sidebar to view details</p>
+        </div>
+
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
