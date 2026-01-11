@@ -1,5 +1,22 @@
 import mongoose from 'mongoose';
 
+
+const UserSchema = new mongoose.Schema({
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true }, // Hashed
+  created: { type: Date, default: Date.now }
+});
+
+const DeviceSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  name: String,
+  deviceId: String, // The unique ID from Android
+  pairingCode: String, // Temp code like "123456"
+  isPaired: { type: Boolean, default: false },
+  lastSeen: Date
+});
+
+
 const AppRuleSchema = new mongoose.Schema({
   deviceId: String, // Added to track which device
   appName: { type: String, required: true },
@@ -57,6 +74,8 @@ const SettingsSchema = new mongoose.Schema({
 });
 
 // Create Models
+export const User = mongoose.model('User', UserSchema);
+export const Device = mongoose.model('Device', DeviceSchema);
 export const AppRule = mongoose.model('AppRule', AppRuleSchema);
 export const LocationLog = mongoose.model('LocationLog', LocationSchema);
 export const Zone = mongoose.model('Zone', ZoneSchema);

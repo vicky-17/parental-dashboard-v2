@@ -3,6 +3,8 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import { fileURLToPath } from 'url';
 import { AppRule, Zone, WebFilter, Settings, LocationLog } from './models.js';
 
@@ -10,6 +12,7 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || "super_secret_key_change_me";
 
 app.use(cors());
 app.use(express.json());
@@ -17,6 +20,114 @@ app.use(express.json());
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ Connected to MongoDB'))
   .catch(err => console.error('❌ MongoDB Connection Error:', err));
+
+
+
+// --- MIDDLEWARE ---
+const authenticate = (req, res, next) => {
+  const token = req.headers['authorization'];
+  if (!token) return res.status(401).json({ error: 'Access denied' });
+  try {
+    const verified = jwt.verify(token.split(" ")[1], JWT_SECRET); // Bearer <token>
+    req.user = verified;
+    next();
+  } catch (err) {
+    res.status(400).json({ error: 'Invalid Token' });
+  }
+};
+
+
+
+// --- AUTH ROUTES ---
+
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = new User({ email, password: hashedPassword });
+    await user.save();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Registration failed. Email might be taken." });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) return res.status(400).json({ error: "User not found" });
+
+    const validPass = await bcrypt.compare(password, user.password);
+    if (!validPass) return res.status(400).json({ error: "Invalid password" });
+
+    const token = jwt.sign({ _id: user._id }, JWT_SECRET);
+    res.json({ token, email: user.email });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- DEVICE / PAIRING ROUTES ---
+
+// 1. Web: Generate a Pairing Code
+app.post('/api/devices/add', authenticate, async (req, res) => {
+  const code = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digit code
+  const device = new Device({
+    userId: req.user._id,
+    name: req.body.name || "New Device",
+    pairingCode: code,
+    isPaired: false
+  });
+  await device.save();
+  res.json({ code });
+});
+
+
+// 2. Android: Pair with Code (No Auth required, just code)
+app.post('/api/devices/pair', async (req, res) => {
+  const { code, deviceId, deviceName } = req.body;
+  const device = await Device.findOne({ pairingCode: code, isPaired: false });
+  
+  if (!device) return res.status(404).json({ error: "Invalid or expired code" });
+
+  device.deviceId = deviceId;
+  device.name = deviceName || device.name;
+  device.isPaired = true;
+  device.pairingCode = null; // Clear code after use
+  await device.save();
+
+  res.json({ success: true, deviceId: deviceId });
+});
+
+
+// 3. Web: Get My Devices
+app.get('/api/devices', authenticate, async (req, res) => {
+  const devices = await Device.find({ userId: req.user._id });
+  res.json(devices);
+});
+
+
+// --- DASHBOARD DATA ROUTES (Protected & Filtered by Device) ---
+
+app.get('/api/data/:deviceId/apps', authenticate, async (req, res) => {
+  // Ensure user owns this device
+  const device = await Device.findOne({ userId: req.user._id, deviceId: req.params.deviceId });
+  if (!device) return res.status(403).json({ error: "Unauthorized" });
+
+  const apps = await AppRule.find({ deviceId: req.params.deviceId });
+  res.json(apps);
+});
+
+app.get('/api/data/:deviceId/location', authenticate, async (req, res) => {
+  const device = await Device.findOne({ userId: req.user._id, deviceId: req.params.deviceId });
+  if (!device) return res.status(403).json({ error: "Unauthorized" });
+
+  const loc = await LocationLog.findOne({ deviceId: req.params.deviceId }).sort({ timestamp: -1 });
+  res.json(loc || {});
+});
+
+
 
 // --- API ROUTES ---
 
