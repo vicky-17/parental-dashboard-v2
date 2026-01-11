@@ -135,26 +135,68 @@ const App = () => {
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
 
-  // Live Location State
+  // Live Location State (Start with a default, but we will fetch real data)
   const [currentLocation, setCurrentLocation] = useState({
     lat: 40.7128,
     lng: -74.0060,
-    address: "123 School Lane, Lincoln High",
-    speed: 4.2,
+    address: "Waiting for update...",
+    speed: 0,
+    batteryLevel: 0,
     timestamp: new Date()
   });
 
-  // Simulate Live Location Updates
+  // --- FETCH DATA FROM SERVER ---
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentLocation(prev => ({
-        ...prev,
-        lat: prev.lat + (Math.random() - 0.5) * 0.0002,
-        lng: prev.lng + (Math.random() - 0.5) * 0.0002,
-        speed: Math.max(0, Math.min(15, prev.speed + (Math.random() - 0.5) * 2)),
-        timestamp: new Date()
-      }));
-    }, 3000);
+    const fetchData = async () => {
+      try {
+        const [appRes, zoneRes, settingRes, webRes, locRes] = await Promise.all([
+          fetch('/api/apps'),
+          fetch('/api/zones'),
+          fetch('/api/settings'),
+          fetch('/api/web/history'),
+          fetch('/api/location/latest') // <--- NEW FETCH
+        ]);
+        
+        const appData = await appRes.json();
+        const zoneData = await zoneRes.json();
+        const settingData = await settingRes.json(); // Note: server now returns {settings: {...}, rules: [...]}
+        const webData = await webRes.json();
+        const locData = await locRes.json();
+
+        if(Array.isArray(appData)) setApps(appData);
+        if(Array.isArray(zoneData)) setZones(zoneData);
+        if(webData) setWebFilter(webData);
+        
+        // Handle Settings structure change
+        if(settingData.settings) {
+            setSettings(prev => ({ ...prev, ...settingData.settings }));
+        } else {
+            setSettings(prev => ({ ...prev, ...settingData }));
+        }
+
+        // Handle Location Update
+        if (locData && locData.latitude) {
+            setCurrentLocation({
+                lat: locData.latitude,
+                lng: locData.longitude,
+                address: `Last Ping: ${new Date(locData.timestamp).toLocaleTimeString()}`,
+                speed: 0, // Server might not store speed yet, can add if needed
+                batteryLevel: locData.batteryLevel || 0,
+                timestamp: new Date(locData.timestamp)
+            });
+        }
+
+        setLastSynced(new Date().toLocaleTimeString());
+      } catch (err) {
+        console.error("Failed to connect to server:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Poll for location every 30 seconds
+    fetchData();
+    const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, []);
 

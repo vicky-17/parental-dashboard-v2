@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 
 const AppRuleSchema = new mongoose.Schema({
+  deviceId: String, // Added to track which device
   appName: { type: String, required: true },
   packageName: { type: String, required: true },
   category: String,
@@ -9,11 +10,21 @@ const AppRuleSchema = new mongoose.Schema({
   isGlobalLocked: { type: Boolean, default: false },
   dailyUsageLimitMinutes: { type: Number, default: 60 },
   usedTodayMinutes: { type: Number, default: 0 },
+  lastTimeUsed: Number, // Timestamp from Android
   schedules: [{
     start: String,
     end: String,
     days: [String]
   }]
+});
+
+// New Location Schema
+const LocationSchema = new mongoose.Schema({
+  deviceId: String,
+  latitude: Number,
+  longitude: Number,
+  batteryLevel: Number,
+  timestamp: { type: Date, default: Date.now }
 });
 
 const ZoneSchema = new mongoose.Schema({
@@ -35,6 +46,10 @@ const WebFilterSchema = new mongoose.Schema({
 });
 
 const SettingsSchema = new mongoose.Schema({
+  deviceId: String,
+  lastModified: { type: Number, default: Date.now }, // For sync versioning
+  locationInterval: { type: Number, default: 60000 }, // How often android updates
+  appSyncInterval: { type: Number, default: 300000 },
   bedtimeWeeknight: String,
   bedtimeWeekend: String,
   uninstallProtection: Boolean,
@@ -43,6 +58,7 @@ const SettingsSchema = new mongoose.Schema({
 
 // Create Models
 export const AppRule = mongoose.model('AppRule', AppRuleSchema);
+export const LocationLog = mongoose.model('LocationLog', LocationSchema);
 export const Zone = mongoose.model('Zone', ZoneSchema);
 export const WebFilter = mongoose.model('WebFilter', WebFilterSchema);
 export const Settings = mongoose.model('Settings', SettingsSchema);
