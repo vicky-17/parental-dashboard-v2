@@ -12,10 +12,21 @@ export interface Device {
 }
 
 export interface AppData {
+  _id?: string; // Optional MongoDB ID
   name: string;
   packageName: string;
+  category?: string;
   installDate?: string;
   iconUrl?: string;
+  usedToday?: number; // In minutes
+  dailyLimit?: number; // In minutes
+  isGlobalLocked?: boolean;
+  schedules?: {
+    id: string;
+    day: string;
+    start: string;
+    end: string;
+  }[];
 }
 
 export interface LocationData {

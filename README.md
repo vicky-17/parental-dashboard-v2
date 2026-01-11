@@ -14,6 +14,12 @@ View your app in AI Studio: https://ai.studio/apps/temp/1
 
 
 1. Install dependencies:
+
+npm install lucide-react 
+npm install react-router-dom
+
+
+
    `npm install`
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:

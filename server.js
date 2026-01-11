@@ -50,10 +50,19 @@ const AppRuleSchema = new mongoose.Schema({
     deviceId: String,
     packageName: String,
     appName: String,
-    isBlocked: { type: Boolean, default: false },
+    category: { type: String, default: 'General' }, // New Field
+    isGlobalLocked: { type: Boolean, default: false }, // Replaces or works with isBlocked
+    schedules: [{ // New Field for Time Slots
+        id: String,
+        day: { type: String, default: 'Everyday' },
+        start: String,
+        end: String
+    }],
     timeLimit: { type: Number, default: 0 }, 
     usedToday: { type: Number, default: 0 } 
 });
+
+
 
 const User = mongoose.model('User', UserSchema);
 const Device = mongoose.model('Device', DeviceSchema);
