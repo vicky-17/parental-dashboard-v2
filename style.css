@@ -113,3 +113,34 @@ body {
 .toggle-checkbox:checked + .toggle-label {
     background-color: var(--primary);
 }
+
+
+
+/* Custom Scrollbar for Sidebar */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 20px;
+}
+
+.custom-scrollbar:hover::-webkit-scrollbar-thumb {
+    background-color: #94a3b8;
+}
+
+/* Nav Item Active State handled by JS class toggling, but helper class here */
+.nav-item.active {
+    background-color: #eef2ff; /* indigo-50 */
+    color: #4f46e5; /* indigo-600 */
+}
+
+
+
+
+
