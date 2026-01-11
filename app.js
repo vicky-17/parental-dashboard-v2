@@ -1,5 +1,5 @@
 // --- CONFIG ---
-const API_URL = '/api'; // Use full URL if testing separate frontend
+const API_URL = '/api';
 
 // --- STATE ---
 let currentDevice = null;
@@ -10,15 +10,13 @@ let locationInterval = null;
 document.addEventListener('DOMContentLoaded', () => {
     if (window.lucide) window.lucide.createIcons();
     
-    // Auth Check
     const token = localStorage.getItem('token');
     if (!token && document.getElementById('device-list')) {
-        window.location.href = 'index.html'; // Redirect to login if not authenticated
+        window.location.href = 'index.html'; 
     } else if (token) {
         initDashboard();
     }
 
-    // Sidebar Mobile Toggle
     const sidebar = document.getElementById('sidebar');
     const menuBtn = document.getElementById('mobile-menu-btn');
     if(menuBtn) {
@@ -31,25 +29,24 @@ document.addEventListener('DOMContentLoaded', () => {
 // --- CORE DASHBOARD LOGIC ---
 
 async function initDashboard() {
-    // Logout Handler
     document.getElementById('logout-btn').addEventListener('click', () => {
         localStorage.removeItem('token');
         window.location.href = 'index.html';
     });
 
-    // Add Device Handler
     document.getElementById('add-device-btn').addEventListener('click', async () => {
         try {
             const res = await authenticatedFetch('/devices/add', { method: 'POST' });
             const data = await res.json();
             document.getElementById('pairing-code-display').textContent = data.code;
             document.getElementById('pairing-modal').classList.remove('hidden');
-            loadDevices(); 
+            // Don't reload devices here immediately, wait for user to finish pairing
         } catch (err) {
             alert('Failed to generate code');
         }
     });
 
+    // Initial Load
     await loadDevices();
 }
 
@@ -77,6 +74,19 @@ async function loadDevices() {
         devices = await res.json();
         renderDeviceList();
         document.getElementById('device-count').textContent = devices.length;
+
+        // --- NEW: AUTO-SELECT LOGIC ---
+        if (devices.length > 0) {
+            // If no device is currently selected, OR the selected one is gone
+            // Select the FIRST device (Top of the list)
+            if (!currentDevice || !devices.find(d => d._id === currentDevice._id)) {
+                selectDevice(devices[0]);
+            }
+        } else {
+            // No devices exist at all -> Show Force Add Prompt
+            showNoDevicesState();
+        }
+
     } catch (err) {
         console.error('Error loading devices', err);
     }
@@ -111,24 +121,15 @@ function renderDeviceList() {
 }
 
 async function selectDevice(device) {
-    if (!device.isPaired) {
-        alert("Device not paired yet.");
-        return;
-    }
-    
     currentDevice = device;
     renderDeviceList(); 
 
     // UI Updates
     document.getElementById('empty-state').classList.add('hidden');
-    // Ensure dashboard tab is visible if no tab selected
-    if(document.querySelector('.tab-content:not(.hidden)') === null) {
-        switchTab('dashboard');
-    } else {
-        // Re-show current tab
-        const activeTab = document.querySelector('.nav-item.active').id.replace('nav-', '');
-        switchTab(activeTab);
-    }
+    
+    // Ensure we are on a valid tab
+    let activeTabId = document.querySelector('.nav-item.active')?.id.replace('nav-', '') || 'dashboard';
+    switchTab(activeTabId); 
 
     document.getElementById('device-status-header').classList.remove('hidden');
     document.getElementById('current-device-name-header').textContent = device.name;
@@ -142,15 +143,35 @@ async function selectDevice(device) {
     locationInterval = setInterval(() => loadLocation(device.deviceId), 3000);
 }
 
+function showNoDevicesState() {
+    currentDevice = null;
+    if (locationInterval) clearInterval(locationInterval);
+
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+    document.getElementById('device-status-header').classList.add('hidden');
+    document.getElementById('active-device-name').textContent = "No Devices";
+
+    // Show Custom Empty State
+    const emptyState = document.getElementById('empty-state');
+    emptyState.classList.remove('hidden');
+    emptyState.innerHTML = `
+        <div class="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mb-6">
+            <i data-lucide="smartphone" width="40" class="text-indigo-600"></i>
+        </div>
+        <h3 class="text-xl font-bold text-slate-800 mb-2">No Connected Devices</h3>
+        <p class="text-slate-500 mb-8 max-w-sm text-center">You haven't paired any devices yet. Add a child's device to start monitoring.</p>
+        <button onclick="document.getElementById('add-device-btn').click()" class="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 flex items-center gap-2">
+            <i data-lucide="plus" width="20"></i> Add New Device
+        </button>
+    `;
+    if (window.lucide) window.lucide.createIcons();
+}
+
 // --- TAB SWITCHING ---
 
 function switchTab(tabId) {
-    // Hide all
-    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-    // Show target
-    document.getElementById(`view-${tabId}`).classList.remove('hidden');
-    
-    // Sidebar Active State
+    // 1. Update Navigation Styling (Always allow clicking tabs visually)
     document.querySelectorAll('.nav-item').forEach(el => {
         el.classList.remove('active', 'bg-indigo-50', 'text-indigo-600');
         el.classList.add('text-slate-600', 'hover:bg-slate-50');
@@ -161,7 +182,20 @@ function switchTab(tabId) {
         activeBtn.classList.remove('text-slate-600', 'hover:bg-slate-50');
     }
 
-    // Title
+    // 2. BLOCK CONTENT if no device exists
+    if (devices.length === 0) {
+        showNoDevicesState();
+        return; // Stop here, don't show tab content
+    }
+
+    // 3. Hide all tabs and Show Target
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+    document.getElementById('empty-state').classList.add('hidden'); // Hide empty state if showing tab
+    
+    const target = document.getElementById(`view-${tabId}`);
+    if(target) target.classList.remove('hidden');
+
+    // 4. Update Header Title
     const titles = {
         'dashboard': 'Overview',
         'apps': 'App Rules & Usage',
@@ -172,7 +206,7 @@ function switchTab(tabId) {
     document.getElementById('page-title').textContent = titles[tabId] || 'Dashboard';
 }
 
-// --- DATA FETCHING ---
+// --- DATA FETCHING (Unchanged logic) ---
 
 async function loadLocation(hardwareId) {
     try {
@@ -189,9 +223,13 @@ async function loadLocation(hardwareId) {
             const dashTime = document.getElementById('map-time');
             if(dashTime) dashTime.textContent = "Updated: " + timeStr;
             
-            document.getElementById('stat-battery').textContent = (loc.batteryLevel || 0) + '%';
-            document.getElementById('map-battery-text').textContent = (loc.batteryLevel || 0) + '%';
-            document.getElementById('map-battery-bar').style.width = (loc.batteryLevel || 0) + '%';
+            const bat = document.getElementById('stat-battery');
+            if(bat) bat.textContent = (loc.batteryLevel || 0) + '%';
+            
+            const mapBatText = document.getElementById('map-battery-text');
+            const mapBatBar = document.getElementById('map-battery-bar');
+            if(mapBatText) mapBatText.textContent = (loc.batteryLevel || 0) + '%';
+            if(mapBatBar) mapBatBar.style.width = (loc.batteryLevel || 0) + '%';
             
             document.getElementById('last-synced-time').textContent = timeStr;
         }
@@ -246,11 +284,12 @@ async function loadApps(hardwareId) {
             tbody.appendChild(row);
         });
 
-        document.getElementById('stat-apps-count').textContent = apps.length;
+        const appCount = document.getElementById('stat-apps-count');
+        if(appCount) appCount.textContent = apps.length;
+        
     } catch(e) { console.error("App fetch error", e); }
 }
 
-// Global update function
 window.updateAppRule = async (packageName, isBlocked, timeLimit) => {
     if (!currentDevice) return;
     try {
@@ -263,7 +302,6 @@ window.updateAppRule = async (packageName, isBlocked, timeLimit) => {
                 timeLimit: parseInt(timeLimit) || 0
             })
         });
-        // Reload apps to reflect state
         loadApps(currentDevice.deviceId);
     } catch (err) {
         console.error('Failed to update rule', err);
