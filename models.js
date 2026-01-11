@@ -1,24 +1,24 @@
 import mongoose from 'mongoose';
 
-
+// --- NEW AUTH SCHEMAS ---
 const UserSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true }, // Hashed
+  password: { type: String, required: true },
   created: { type: Date, default: Date.now }
 });
 
 const DeviceSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   name: String,
-  deviceId: String, // The unique ID from Android
-  pairingCode: String, // Temp code like "123456"
+  deviceId: String, // The Android ID
+  pairingCode: String,
   isPaired: { type: Boolean, default: false },
   lastSeen: Date
 });
 
-
+// --- EXISTING SCHEMAS ---
 const AppRuleSchema = new mongoose.Schema({
-  deviceId: String, // Added to track which device
+  deviceId: String, // Linked to Device
   appName: { type: String, required: true },
   packageName: { type: String, required: true },
   category: String,
@@ -27,7 +27,7 @@ const AppRuleSchema = new mongoose.Schema({
   isGlobalLocked: { type: Boolean, default: false },
   dailyUsageLimitMinutes: { type: Number, default: 60 },
   usedTodayMinutes: { type: Number, default: 0 },
-  lastTimeUsed: Number, // Timestamp from Android
+  lastTimeUsed: Number,
   schedules: [{
     start: String,
     end: String,
@@ -35,7 +35,6 @@ const AppRuleSchema = new mongoose.Schema({
   }]
 });
 
-// New Location Schema
 const LocationSchema = new mongoose.Schema({
   deviceId: String,
   latitude: Number,
@@ -64,8 +63,8 @@ const WebFilterSchema = new mongoose.Schema({
 
 const SettingsSchema = new mongoose.Schema({
   deviceId: String,
-  lastModified: { type: Number, default: Date.now }, // For sync versioning
-  locationInterval: { type: Number, default: 60000 }, // How often android updates
+  lastModified: { type: Number, default: Date.now },
+  locationInterval: { type: Number, default: 60000 },
   appSyncInterval: { type: Number, default: 300000 },
   bedtimeWeeknight: String,
   bedtimeWeekend: String,

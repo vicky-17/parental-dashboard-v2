@@ -6,13 +6,14 @@ import path from 'path';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { fileURLToPath } from 'url';
-import { AppRule, Zone, WebFilter, Settings, LocationLog } from './models.js';
+// Ensure User and Device are imported here
+import { User, Device, AppRule, Zone, WebFilter, Settings, LocationLog } from './models.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || "super_secret_key_change_me";
+const JWT_SECRET = process.env.JWT_SECRET || "change_this_to_a_secure_random_string";
 
 app.use(cors());
 app.use(express.json());
@@ -20,8 +21,6 @@ app.use(express.json());
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ Connected to MongoDB'))
   .catch(err => console.error('❌ MongoDB Connection Error:', err));
-
-
 
 // --- MIDDLEWARE ---
 const authenticate = (req, res, next) => {
@@ -36,19 +35,22 @@ const authenticate = (req, res, next) => {
   }
 };
 
-
-
-// --- AUTH ROUTES ---
+// --- AUTH ROUTES (This fixes your Register/Login errors) ---
 
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { email, password } = req.body;
+    // Check if user exists
+    const existing = await User.findOne({ email });
+    if(existing) return res.status(400).json({ error: "Email already taken" });
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = new User({ email, password: hashedPassword });
     await user.save();
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: "Registration failed. Email might be taken." });
+    console.error("Register Error:", err);
+    res.status(500).json({ error: "Registration failed." });
   }
 });
 
@@ -64,136 +66,105 @@ app.post('/api/auth/login', async (req, res) => {
     const token = jwt.sign({ _id: user._id }, JWT_SECRET);
     res.json({ token, email: user.email });
   } catch (err) {
+    console.error("Login Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// --- DEVICE / PAIRING ROUTES ---
+// --- DEVICE & PAIRING ROUTES ---
 
-// 1. Web: Generate a Pairing Code
+// 1. Generate Pairing Code (Web)
 app.post('/api/devices/add', authenticate, async (req, res) => {
-  const code = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digit code
-  const device = new Device({
-    userId: req.user._id,
-    name: req.body.name || "New Device",
-    pairingCode: code,
-    isPaired: false
-  });
-  await device.save();
-  res.json({ code });
-});
-
-
-// 2. Android: Pair with Code (No Auth required, just code)
-app.post('/api/devices/pair', async (req, res) => {
-  const { code, deviceId, deviceName } = req.body;
-  const device = await Device.findOne({ pairingCode: code, isPaired: false });
-  
-  if (!device) return res.status(404).json({ error: "Invalid or expired code" });
-
-  device.deviceId = deviceId;
-  device.name = deviceName || device.name;
-  device.isPaired = true;
-  device.pairingCode = null; // Clear code after use
-  await device.save();
-
-  res.json({ success: true, deviceId: deviceId });
-});
-
-
-// 3. Web: Get My Devices
-app.get('/api/devices', authenticate, async (req, res) => {
-  const devices = await Device.find({ userId: req.user._id });
-  res.json(devices);
-});
-
-
-// --- DASHBOARD DATA ROUTES (Protected & Filtered by Device) ---
-
-app.get('/api/data/:deviceId/apps', authenticate, async (req, res) => {
-  // Ensure user owns this device
-  const device = await Device.findOne({ userId: req.user._id, deviceId: req.params.deviceId });
-  if (!device) return res.status(403).json({ error: "Unauthorized" });
-
-  const apps = await AppRule.find({ deviceId: req.params.deviceId });
-  res.json(apps);
-});
-
-app.get('/api/data/:deviceId/location', authenticate, async (req, res) => {
-  const device = await Device.findOne({ userId: req.user._id, deviceId: req.params.deviceId });
-  if (!device) return res.status(403).json({ error: "Unauthorized" });
-
-  const loc = await LocationLog.findOne({ deviceId: req.params.deviceId }).sort({ timestamp: -1 });
-  res.json(loc || {});
-});
-
-
-
-// --- API ROUTES ---
-
-// 1. App Rules (Sync from Android)
-app.get('/api/apps', async (req, res) => {
   try {
-    const apps = await AppRule.find();
-    res.json(apps);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const device = new Device({
+      userId: req.user._id,
+      name: req.body.name || "New Device",
+      pairingCode: code,
+      isPaired: false
+    });
+    await device.save();
+    res.json({ code });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
+// 2. Pair Device (Android)
+app.post('/api/devices/pair', async (req, res) => {
+  try {
+    const { code, deviceId, deviceName } = req.body;
+    const device = await Device.findOne({ pairingCode: code, isPaired: false });
+    
+    if (!device) return res.status(404).json({ error: "Invalid or expired code" });
+
+    device.deviceId = deviceId;
+    device.name = deviceName || device.name;
+    device.isPaired = true;
+    device.pairingCode = null; // Clear code
+    await device.save();
+
+    res.json({ success: true, deviceId: deviceId });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 3. Get User Devices (Web)
+app.get('/api/devices', authenticate, async (req, res) => {
+  try {
+    const devices = await Device.find({ userId: req.user._id });
+    res.json(devices);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- DATA ROUTES (Protected & Device Specific) ---
+
+app.get('/api/data/:deviceId/apps', authenticate, async (req, res) => {
+  try {
+    const apps = await AppRule.find({ deviceId: req.params.deviceId });
+    res.json(apps);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/data/:deviceId/location', authenticate, async (req, res) => {
+  try {
+    const loc = await LocationLog.findOne({ deviceId: req.params.deviceId }).sort({ timestamp: -1 });
+    res.json(loc || {});
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- ANDROID UPLOAD ROUTES ---
+
 app.post('/api/apps', async (req, res) => {
-  // Handle BULK update from Android
-  // Payload: { deviceId: "...", apps: [ { packageName, appName, minutes... } ] }
   try {
     const { deviceId, apps } = req.body;
-    
-    if (!apps || !Array.isArray(apps)) {
-      // Fallback for manual single creation (testing)
-      const newApp = new AppRule(req.body);
-      await newApp.save();
-      return res.status(201).json(newApp);
-    }
+    if (!apps || !Array.isArray(apps)) return res.status(400).json({ error: "Invalid data" });
 
     const operations = apps.map(app => ({
       updateOne: {
-        filter: { packageName: app.packageName }, // Match by package
+        filter: { packageName: app.packageName, deviceId: deviceId },
         update: { 
           $set: { 
              appName: app.appName,
-             deviceId: deviceId,
              usedTodayMinutes: app.minutes,
              lastTimeUsed: app.lastTime
           },
-          $setOnInsert: { // Only set defaults if new
-             dailyUsageLimitMinutes: 60,
-             isGlobalLocked: false
-          }
+          $setOnInsert: { dailyUsageLimitMinutes: 60, isGlobalLocked: false }
         },
         upsert: true
       }
     }));
 
-    if(operations.length > 0) {
-      await AppRule.bulkWrite(operations);
-    }
-    
-    res.json({ success: true, count: operations.length });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.put('/api/apps/:id', async (req, res) => {
-  try {
-    const updatedApp = await AppRule.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.json(updatedApp);
+    if(operations.length > 0) await AppRule.bulkWrite(operations);
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// 2. Location (New Endpoint for Android)
 app.post('/api/location', async (req, res) => {
   try {
     const log = new LocationLog(req.body);
@@ -204,56 +175,25 @@ app.post('/api/location', async (req, res) => {
   }
 });
 
-// Get Latest Location for Dashboard
-app.get('/api/location/latest', async (req, res) => {
-  try {
-    // Get the single most recent location log
-    const latest = await LocationLog.findOne().sort({ timestamp: -1 });
-    res.json(latest || {});
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+// Settings & Web (Generic for now, ideally device specific)
+app.get('/api/settings', authenticate, async (req, res) => {
+    const settings = await Settings.findOne() || {};
+    res.json({ settings });
+});
+app.post('/api/settings', authenticate, async (req, res) => {
+    const settings = await Settings.findOneAndUpdate({}, req.body, { upsert: true, new: true });
+    res.json(settings);
+});
+app.get('/api/zones', authenticate, async (req, res) => {
+    const zones = await Zone.find();
+    res.json(zones);
+});
+app.get('/api/web/history', authenticate, async (req, res) => {
+    const filter = await WebFilter.findOne() || new WebFilter();
+    res.json(filter);
 });
 
-// 3. Settings (Sync logic)
-app.get('/api/settings', async (req, res) => {
-  try {
-     const settings = await Settings.findOne() || {};
-     // Also send back ALL rules so Android can cache them locally
-     const rules = await AppRule.find();
-     
-     res.json({
-        settings: settings,
-        rules: rules // Android needs this in the sync response
-     });
-  } catch(e) {
-     res.status(500).json({error: e.message});
-  }
-});
-
-app.post('/api/settings', async (req, res) => {
-  // Update timestamp so Android knows to fetch new config
-  const updateData = { ...req.body, lastModified: Date.now() };
-  const settings = await Settings.findOneAndUpdate({}, updateData, { upsert: true, new: true });
-  res.json(settings);
-});
-
-// 4. Web Filter & Zones (Standard)
-app.get('/api/zones', async (req, res) => {
-  const zones = await Zone.find();
-  res.json(zones);
-});
-app.post('/api/zones', async (req, res) => {
-  const newZone = new Zone(req.body);
-  await newZone.save();
-  res.json(newZone);
-});
-app.get('/api/web/history', async (req, res) => {
-  const filter = await WebFilter.findOne() || new WebFilter();
-  res.json(filter);
-});
-
-// --- Serve Frontend ---
+// --- SERVE FRONTEND ---
 if (process.env.NODE_ENV === 'production') {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   app.use(express.static(path.join(__dirname, 'dist')));
