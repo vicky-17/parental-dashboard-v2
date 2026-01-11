@@ -358,7 +358,8 @@ window.updateAppRule = async (packageName, isBlocked, timeLimit) => {
 
 
 
-function renderDashboard(apps) {
+function renderDashboard(loc, apps) {
+    // 1. Calculate Metrics
     let totalMinutes = 0;
     let blockedCount = 0;
     
@@ -367,20 +368,46 @@ function renderDashboard(apps) {
         if (app.isBlocked) blockedCount++;
     });
 
-    // 1. Security Card
-    const secCount = document.getElementById('dash-security-count');
-    const secText = document.getElementById('dash-security-text');
-    if (secCount) secCount.textContent = blockedCount;
-    if (secText) secText.textContent = blockedCount > 0 ? `${blockedCount} apps blocked` : "No threats detected";
+    // 2. Update Security Card
+    const secCountEl = document.getElementById('dash-security-count');
+    const secTextEl = document.getElementById('dash-security-text');
+    if(secCountEl) secCountEl.textContent = blockedCount;
+    if(secTextEl) secTextEl.textContent = blockedCount > 0 ? "Apps currently blocked" : "No active blocks";
 
-    // 2. Screen Time Card
+    // 3. Update Screen Time Card
     const usageEl = document.getElementById('dash-total-usage');
     const usageBar = document.getElementById('dash-usage-bar');
-    if (usageEl) usageEl.textContent = `${totalMinutes}m`;
-    if (usageBar) {
-        // Calculate percentage (Assuming 2 hours / 120m limit)
+    if(usageEl) usageEl.textContent = `${totalMinutes}m`;
+    if(usageBar) {
+        // Assuming 120 minutes (2 hours) is the 100% mark for visual reference
         const pct = Math.min((totalMinutes / 120) * 100, 100); 
         usageBar.style.width = `${pct}%`;
+    }
+
+    // 4. Update System Status
+    const pingEl = document.getElementById('dash-last-ping');
+    if(pingEl && loc.timestamp) {
+        pingEl.textContent = "Ping: " + new Date(loc.timestamp).toLocaleTimeString();
+    }
+
+    // 5. Update Map & Telemetry
+    if (loc && loc.latitude) {
+        // Battery
+        document.getElementById('dash-battery-text').textContent = (loc.batteryLevel || 0) + '%';
+        document.getElementById('dash-battery-bar').style.width = (loc.batteryLevel || 0) + '%';
+        
+        // Coords
+        document.getElementById('dash-lat').textContent = loc.latitude.toFixed(4);
+        document.getElementById('dash-lng').textContent = loc.longitude.toFixed(4);
+        
+        // Speed (Mocking it for now as loc.speed might not exist yet)
+        const speed = loc.speed || 0;
+        document.getElementById('dash-speed').innerHTML = `${speed.toFixed(1)} <span class="text-xs text-slate-400 font-normal">mph</span>`;
+        document.getElementById('map-status-tag').textContent = `Live • ${speed.toFixed(1)} mph`;
+
+        // Address (Placeholder - Requires Reverse Geocoding API in real app)
+        // For now, we show a clean formatted string of coords
+        document.getElementById('dash-address').textContent = `Near ${loc.latitude.toFixed(3)}, ${loc.longitude.toFixed(3)}`;
     }
 }
 
