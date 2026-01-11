@@ -12,7 +12,6 @@ const JWT_SECRET = 'your_super_secret_key_123';
 // Middleware
 app.use(cors());
 app.use(express.json());
-// Serve the current directory as static files (for index.html, dashboard.html, etc.)
 app.use(express.static(__dirname));
 
 // Database Connection
@@ -42,7 +41,7 @@ const LocationSchema = new mongoose.Schema({
     deviceId: String,
     latitude: Number,
     longitude: Number,
-    batteryLevel: Number, // Added battery level
+    batteryLevel: Number, 
     timestamp: { type: Date, default: Date.now }
 });
 
@@ -50,19 +49,17 @@ const AppRuleSchema = new mongoose.Schema({
     deviceId: String,
     packageName: String,
     appName: String,
-    category: { type: String, default: 'General' }, // New Field
-    isGlobalLocked: { type: Boolean, default: false }, // Replaces or works with isBlocked
-    schedules: [{ // New Field for Time Slots
+    category: { type: String, default: 'General' }, 
+    isGlobalLocked: { type: Boolean, default: false }, 
+    schedules: [{ 
         id: String,
         day: { type: String, default: 'Everyday' },
-        start: String,
-        end: String
+        start: String, // Stores "HH:mm" (24-hour format)
+        end: String    // Stores "HH:mm" (24-hour format)
     }],
     timeLimit: { type: Number, default: 0 }, 
     usedToday: { type: Number, default: 0 } 
 });
-
-
 
 const User = mongoose.model('User', UserSchema);
 const Device = mongoose.model('Device', DeviceSchema);
@@ -140,7 +137,7 @@ app.post('/api/devices/add', authenticateToken, async (req, res) => {
 // 3. Pairing (Child Side)
 app.post('/api/devices/pair', async (req, res) => {
     try {
-        const { code, deviceId, deviceName } = req.body; // Matches Android naming
+        const { code, deviceId, deviceName } = req.body; 
         const device = await Device.findOne({ pairingCode: code, isPaired: false });
         if (!device) return res.status(404).json({ success: false, message: 'Invalid Code' });
 
@@ -178,9 +175,9 @@ app.post('/api/apps', async (req, res) => {
                         $set: { 
                             appName: app.appName, 
                             usedToday: app.minutes || 0,
-                            category: app.category || 'General' // <--- ADD THIS LINE
+                            category: app.category || 'General' 
                         },
-                        $setOnInsert: { isBlocked: false, timeLimit: 0 }
+                        $setOnInsert: { isGlobalLocked: false, timeLimit: 0 }
                     },
                     { upsert: true, new: true }
                 );
@@ -215,10 +212,18 @@ app.get('/api/data/:deviceId/location', authenticateToken, async (req, res) => {
 // 6. Rules (Parent Updates)
 app.post('/api/rules/update', authenticateToken, async (req, res) => {
     try {
-        const { deviceId, packageName, isBlocked, timeLimit } = req.body;
+        // [UPDATED] Accepts isGlobalLocked and schedules
+        const { deviceId, packageName, isGlobalLocked, schedules, timeLimit } = req.body;
+        
+        const updateFields = {};
+        if (isGlobalLocked !== undefined) updateFields.isGlobalLocked = isGlobalLocked;
+        if (schedules !== undefined) updateFields.schedules = schedules;
+        if (timeLimit !== undefined) updateFields.timeLimit = timeLimit;
+
         await AppRule.findOneAndUpdate(
             { deviceId, packageName },
-            { isBlocked, timeLimit }
+            { $set: updateFields },
+            { new: true }
         );
         res.json({ success: true });
     } catch (error) {

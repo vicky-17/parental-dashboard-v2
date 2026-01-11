@@ -5,11 +5,11 @@ const API_URL = '/api';
 let currentDevice = null;
 let devices = [];
 let locationInterval = null;
-let currentApps = []; // New: Local state for apps
+let currentApps = []; 
+let modifiedApps = new Set(); // Tracks indices of modified apps
 
 let liveMap = null;
 let liveMarker = null;
-
 
 // --- INIT ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -29,6 +29,18 @@ document.addEventListener('DOMContentLoaded', () => {
             sidebar.classList.toggle('-translate-x-full');
         });
     }
+
+    // Create Floating Save Button Container
+    const saveBtnHTML = `
+        <div id="save-changes-container" class="fixed bottom-6 right-6 z-50 transform translate-y-20 transition-transform duration-300">
+            <button onclick="window.saveAllChanges()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-full shadow-lg flex items-center gap-2 animate-bounce-slight">
+                <i data-lucide="save" width="20"></i>
+                <span>Save Changes</span>
+            </button>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', saveBtnHTML);
+    if (window.lucide) window.lucide.createIcons();
 });
 
 // --- CORE DASHBOARD LOGIC ---
@@ -50,7 +62,6 @@ async function initDashboard() {
         }
     });
 
-    // Initial Load
     await loadDevices();
 }
 
@@ -123,31 +134,27 @@ function renderDeviceList() {
 async function selectDevice(device) {
     currentDevice = device;
     renderDeviceList(); 
-
-    // UI Updates
     document.getElementById('empty-state').classList.add('hidden');
     
-    // Ensure we are on a valid tab
     let activeTabId = document.querySelector('.nav-item.active')?.id.replace('nav-', '') || 'dashboard';
     switchTab(activeTabId); 
 
     document.getElementById('device-status-header').classList.remove('hidden');
     document.getElementById('current-device-name-header').textContent = device.name;
     
-    // Initial Data Load
     if (locationInterval) clearInterval(locationInterval);
+    
+    // Clear modifications on device switch
+    modifiedApps.clear();
+    toggleSaveButton();
+
     await Promise.all([ loadLocation(device.deviceId), loadApps(device.deviceId) ]);
 
-    // Initialize Map if not already done
     if (!liveMap && document.getElementById('liveMap')) {
         liveMap = L.map('liveMap').setView([20.5937, 78.9629], 5); 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '&copy; OpenStreetMap contributors'
-        }).addTo(liveMap);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(liveMap);
     }
 
-    // Start Live Polling (every 3s)
     locationInterval = setInterval(() => {
         if(currentDevice) loadLocation(currentDevice.deviceId);
     }, 3000);
@@ -156,15 +163,10 @@ async function selectDevice(device) {
 function showNoDevicesState() {
     currentDevice = null;
     if (locationInterval) clearInterval(locationInterval);
-
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
     document.getElementById('device-status-header').classList.add('hidden');
-
-    const emptyState = document.getElementById('empty-state');
-    emptyState.classList.remove('hidden');
+    document.getElementById('empty-state').classList.remove('hidden');
 }
-
-// --- TAB SWITCHING ---
 
 function switchTab(tabId) {
     document.querySelectorAll('.nav-item').forEach(el => {
@@ -184,7 +186,6 @@ function switchTab(tabId) {
 
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
     document.getElementById('empty-state').classList.add('hidden'); 
-    
     const target = document.getElementById(`view-${tabId}`);
     if(target) target.classList.remove('hidden');
 
@@ -197,7 +198,6 @@ function switchTab(tabId) {
     };
     document.getElementById('page-title').textContent = titles[tabId] || 'Dashboard';
 
-    // FIX: Resize map when tab is shown to prevent grey area
     if (tabId === 'dashboard' && liveMap) {
         setTimeout(() => {
             liveMap.invalidateSize();
@@ -208,15 +208,12 @@ function switchTab(tabId) {
     }
 }
 
-// --- DATA FETCHING: LOCATION ---
-
 async function loadLocation(hardwareId) {
     try {
         const res = await authenticatedFetch(`/data/${hardwareId}/location`);
         const loc = await res.json();
         
         if (loc && loc.latitude) {
-            // 1. UPDATE MAP
             if (liveMap) {
                 const pos = [loc.latitude, loc.longitude];
                 if (!liveMarker) {
@@ -224,48 +221,22 @@ async function loadLocation(hardwareId) {
                     liveMap.setView(pos, 16); 
                 } else {
                     liveMarker.setLatLng(pos);
-                    liveMap.setView(pos, liveMap.getZoom()); 
                 }
             }
 
-            // 2. UPDATE TEXT STATS
             const timeStr = new Date(loc.timestamp).toLocaleTimeString();
-            
-            const lastSync = document.getElementById('last-synced-time');
-            if(lastSync) lastSync.textContent = timeStr;
-
-            const pingEl = document.getElementById('dash-last-ping');
-            if(pingEl) pingEl.textContent = "Ping: " + timeStr;
-
-            // Battery
-            const batText = document.getElementById('dash-battery-text');
-            const batBar = document.getElementById('dash-battery-bar');
-            if(batText) batText.textContent = (loc.batteryLevel || 0) + '%';
-            if(batBar) batBar.style.width = (loc.batteryLevel || 0) + '%';
-            
-            // Coordinates
-            const latEl = document.getElementById('dash-lat');
-            const lngEl = document.getElementById('dash-lng');
-            if(latEl) latEl.textContent = loc.latitude.toFixed(4);
-            if(lngEl) lngEl.textContent = loc.longitude.toFixed(4);
-
-            // Address Placeholder
-            const addrEl = document.getElementById('dash-address');
-            if(addrEl) addrEl.textContent = `Lat: ${loc.latitude.toFixed(4)}, Lng: ${loc.longitude.toFixed(4)}`;
-
-            // Speed
-            const speedEl = document.getElementById('dash-speed');
-            if(speedEl) {
-                const speed = loc.speed || 0; 
-                speedEl.innerHTML = `${speed.toFixed(1)} <span class="text-xs text-slate-400 font-normal">mph</span>`;
-            }
+            document.getElementById('last-synced-time').textContent = timeStr;
+            document.getElementById('dash-last-ping').textContent = "Ping: " + timeStr;
+            document.getElementById('dash-battery-text').textContent = (loc.batteryLevel || 0) + '%';
+            document.getElementById('dash-battery-bar').style.width = (loc.batteryLevel || 0) + '%';
+            document.getElementById('dash-lat').textContent = loc.latitude.toFixed(4);
+            document.getElementById('dash-lng').textContent = loc.longitude.toFixed(4);
+            document.getElementById('dash-address').textContent = `Lat: ${loc.latitude.toFixed(4)}, Lng: ${loc.longitude.toFixed(4)}`;
+            document.getElementById('dash-speed').innerHTML = `${(loc.speed || 0).toFixed(1)} <span class="text-xs text-slate-400 font-normal">mph</span>`;
         }
     } catch(e) { console.error("Loc fetch error", e); }
 }
 
-// --- DATA FETCHING: APPS (NEW UI) ---
-
-// Helper for first-letter colors
 function getAppColor(name) {
     const n = (name || "").toLowerCase();
     if (n.includes('tiktok')) return 'bg-black';
@@ -274,16 +245,15 @@ function getAppColor(name) {
     if (n.includes('instagram')) return 'bg-pink-600';
     if (n.includes('facebook')) return 'bg-blue-600';
     if (n.includes('whatsapp')) return 'bg-green-500';
-    if (n.includes('snapchat')) return 'bg-yellow-400';
-    if (n.includes('minecraft')) return 'bg-green-700';
-    if (n.includes('chrome')) return 'bg-blue-500';
-    return 'bg-indigo-600'; // Default
+    return 'bg-indigo-600';
 }
 
 async function loadApps(hardwareId) {
     try {
         const res = await authenticatedFetch(`/data/${hardwareId}/apps`);
-        currentApps = await res.json(); // Store in global state
+        currentApps = await res.json(); 
+        modifiedApps.clear(); // Clear unsaved changes on refresh
+        toggleSaveButton();
         renderAppGrid();
         updateDashboardUsageStats();
     } catch(e) { 
@@ -313,6 +283,7 @@ function renderAppGrid() {
         // Logic: Determine State
         const isLocked = app.isGlobalLocked === true;
         const hasSchedules = app.schedules && app.schedules.length > 0;
+        const isModified = modifiedApps.has(index.toString());
         
         let cardClasses = "relative rounded-xl border-2 transition-all overflow-hidden ";
         let statusBadge = "";
@@ -332,11 +303,18 @@ function renderAppGrid() {
             statusBadge = `<div class="bg-orange-500 text-white px-3 py-1 text-[10px] font-bold uppercase tracking-wide rounded-full flex items-center gap-1"><i data-lucide="clock" width="10"></i> Scheduled</div>`;
         }
 
+        // Highlight Modified Cards
+        if (isModified) {
+            cardClasses += " ring-2 ring-indigo-500 ring-offset-2";
+        }
+
         const appColor = getAppColor(app.appName);
         
         // HTML Construction
         const cardHTML = `
             <div class="${cardClasses}">
+                ${isModified ? `<div class="absolute top-0 right-0 bg-indigo-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-bl-lg z-10">UNSAVED</div>` : ''}
+
                 <div class="p-5">
                     <div class="flex flex-col md:flex-row justify-between gap-4">
                         
@@ -441,39 +419,34 @@ function updateDashboardUsageStats() {
     if(secText) secText.textContent = blockedCount > 0 ? `${blockedCount} apps locked` : "No restrictions active";
 }
 
-// --- APP ACTIONS (Exposed to Window for HTML OnClick) ---
+// --- NEW SAVE FUNCTIONALITY ---
 
-window.toggleAppLock = async (idx) => {
+function markAsModified(idx) {
+    modifiedApps.add(idx.toString());
+    toggleSaveButton();
+    renderAppGrid();
+    updateDashboardUsageStats();
+}
+
+function toggleSaveButton() {
+    const btnContainer = document.getElementById('save-changes-container');
+    if (!btnContainer) return;
+    
+    if (modifiedApps.size > 0) {
+        btnContainer.classList.remove('translate-y-20');
+    } else {
+        btnContainer.classList.add('translate-y-20');
+    }
+}
+
+window.toggleAppLock = (idx) => {
     if (!currentDevice) return;
     const app = currentApps[idx];
-    const newStatus = !app.isGlobalLocked;
-    
-    // 1. Optimistic UI Update (Update local state & re-render immediately)
-    app.isGlobalLocked = newStatus;
-    renderAppGrid(); 
-    updateDashboardUsageStats();
-
-    // 2. Server Call
-    try {
-        await authenticatedFetch('/rules/update', {
-            method: 'POST',
-            body: JSON.stringify({
-                deviceId: currentDevice.deviceId,
-                packageName: app.packageName,
-                isGlobalLocked: newStatus,
-                isBlocked: newStatus // Keeping isBlocked for compatibility if needed
-            })
-        });
-    } catch (err) {
-        console.error('Failed to update lock', err);
-        // Revert on failure
-        app.isGlobalLocked = !newStatus;
-        renderAppGrid();
-        alert("Failed to save changes. Check connection.");
-    }
+    app.isGlobalLocked = !app.isGlobalLocked;
+    markAsModified(idx);
 };
 
-window.addSchedule = async (idx) => {
+window.addSchedule = (idx) => {
     const app = currentApps[idx];
     if (!app.schedules) app.schedules = [];
     
@@ -484,41 +457,57 @@ window.addSchedule = async (idx) => {
         end: '13:00'
     };
     app.schedules.push(newSlot);
-    renderAppGrid();
-
-    // Sync changes
-    syncAppRules(app);
+    markAsModified(idx);
 };
 
-window.removeSchedule = async (appIdx, scheduleId) => {
+window.removeSchedule = (appIdx, scheduleId) => {
     const app = currentApps[appIdx];
     app.schedules = app.schedules.filter(s => s.id !== scheduleId);
-    renderAppGrid();
-    syncAppRules(app);
+    markAsModified(appIdx);
 };
 
-window.saveSchedule = async (appIdx, scheduleId, field, value) => {
+window.saveSchedule = (appIdx, scheduleId, field, value) => {
     const app = currentApps[appIdx];
     const slot = app.schedules.find(s => s.id === scheduleId);
     if (slot) {
         slot[field] = value;
-        syncAppRules(app);
+        markAsModified(appIdx);
     }
 };
 
-async function syncAppRules(app) {
-    if (!currentDevice) return;
+window.saveAllChanges = async () => {
+    if (!currentDevice || modifiedApps.size === 0) return;
+
+    const btn = document.querySelector('#save-changes-container button');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = `<i data-lucide="loader-2" class="animate-spin" width="20"></i> Saving...`;
+    if(window.lucide) window.lucide.createIcons();
+
     try {
-        await authenticatedFetch('/rules/update', {
-            method: 'POST',
-            body: JSON.stringify({
-                deviceId: currentDevice.deviceId,
-                packageName: app.packageName,
-                schedules: app.schedules,
-                isGlobalLocked: app.isGlobalLocked
-            })
+        const promises = Array.from(modifiedApps).map(idx => {
+            const app = currentApps[parseInt(idx)];
+            return authenticatedFetch('/rules/update', {
+                method: 'POST',
+                body: JSON.stringify({
+                    deviceId: currentDevice.deviceId,
+                    packageName: app.packageName,
+                    schedules: app.schedules,
+                    isGlobalLocked: app.isGlobalLocked
+                })
+            });
         });
+
+        await Promise.all(promises);
+        
+        // Success
+        modifiedApps.clear();
+        toggleSaveButton();
+        btn.innerHTML = originalText;
+        alert("Settings saved successfully!");
+
     } catch (err) {
-        console.error('Failed to sync rules', err);
+        console.error('Failed to save changes', err);
+        btn.innerHTML = originalText;
+        alert("Failed to save changes. Please try again.");
     }
-}
+};
