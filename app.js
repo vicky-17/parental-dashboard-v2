@@ -5,8 +5,7 @@ const API_URL = '/api';
 let currentDevice = null;
 let devices = [];
 let locationInterval = null;
-let map = null;
-let marker = null;
+
 
 // --- INIT ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -17,7 +16,6 @@ document.addEventListener('DOMContentLoaded', () => {
         window.location.href = 'index.html'; 
     } else if (token) {
         initDashboard();
-        initMap();
     }
 
     const sidebar = document.getElementById('sidebar');
@@ -209,46 +207,6 @@ function switchTab(tabId) {
     document.getElementById('page-title').textContent = titles[tabId] || 'Dashboard';
 }
 
-// --- MAP LOGIC ---
-function initMap() {
-    // Initialize map centered on world (will zoom to child later)
-    map = L.map('map', { zoomControl: false }).setView([20, 0], 2);
-    
-    // Add Free OpenStreetMap Tiles
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap'
-    }).addTo(map);
-    
-    // Move Zoom controls to bottom right
-    L.control.zoom({ position: 'bottomright' }).addTo(map);
-}
-
-function updateMap(lat, lng) {
-    if (!map) return;
-
-    // Custom Icon: Small Dot + Label Text
-    const customIcon = L.divIcon({
-        className: 'custom-pin',
-        html: `
-            <div style="position: relative;">
-                <div class="pin-dot"></div>
-                <div class="pin-label">Child</div>
-            </div>
-        `,
-        iconSize: [12, 12],
-        iconAnchor: [6, 6] // Center the dot
-    });
-
-    if (marker) {
-        marker.setLatLng([lat, lng]);
-    } else {
-        marker = L.marker([lat, lng], { icon: customIcon }).addTo(map);
-    }
-
-    // Zoom to exact location (Level 16 is street view)
-    map.setView([lat, lng], 16);
-}
-
 // --- DATA FETCHING (Unchanged logic) ---
 
 async function loadLocation(hardwareId) {
@@ -257,7 +215,6 @@ async function loadLocation(hardwareId) {
         const loc = await res.json();
         
         if (loc && loc.latitude) {
-            updateMap(loc.latitude, loc.longitude);
             const timeStr = new Date(loc.timestamp).toLocaleTimeString();
             const coordsStr = `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`;
             
