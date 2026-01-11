@@ -32,7 +32,7 @@
                 <i data-lucide="activity" width="18"></i> Dashboard
             </button>
             <button onclick="switchTab('apps')" id="nav-apps" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-600 hover:bg-slate-50">
-                <i data-lucide="clock" width="18"></i> App Rules
+                <i data-lucide="clock" width="18"></i> App Usage & Rules
             </button>
             <button onclick="switchTab('web')" id="nav-web" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-600 hover:bg-slate-50">
                 <i data-lucide="globe" width="18"></i> Web Safety
@@ -227,21 +227,21 @@
 
             </div>
 
-            <div id="view-apps" class="tab-content hidden animate-fade-in max-w-6xl mx-auto">
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                    <table class="w-full text-left border-collapse">
-                        <thead class="bg-slate-50/80 text-xs uppercase text-slate-500 font-semibold border-b border-slate-200">
-                            <tr>
-                                <th class="px-6 py-4">Application Name</th>
-                                <th class="px-6 py-4">Usage Today</th>
-                                <th class="px-6 py-4 text-center">Status</th>
-                                <th class="px-6 py-4 text-right">Daily Limit</th>
-                            </tr>
-                        </thead>
-                        <tbody id="app-list-body" class="divide-y divide-slate-100 text-sm">
-                            <tr><td colspan="4" class="p-8 text-center text-slate-400">Loading apps...</td></tr>
-                        </tbody>
-                    </table>
+            <div id="view-apps" class="tab-content hidden animate-fade-in max-w-6xl mx-auto space-y-6">
+                <div class="flex items-center justify-between px-2">
+                    <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                       App Limits & Schedules
+                    </h3>
+                    <span class="bg-slate-100 px-3 py-1 rounded-full text-sm text-slate-500 border border-slate-200 shadow-sm">
+                        MongoDB: app_rules
+                    </span>
+                </div>
+            
+                <div id="app-grid-container" class="grid grid-cols-1 md:grid-cols-2 gap-6 pb-12">
+                    <div class="col-span-full text-center text-slate-400 py-12">
+                        <i data-lucide="loader" class="animate-spin mx-auto mb-2"></i>
+                        <p>Loading app data...</p>
+                     </div>
                 </div>
             </div>
 

@@ -5,6 +5,7 @@ const API_URL = '/api';
 let currentDevice = null;
 let devices = [];
 let locationInterval = null;
+let currentApps = []; // New: Local state for apps
 
 let liveMap = null;
 let liveMarker = null;
@@ -200,7 +201,6 @@ function switchTab(tabId) {
     if (tabId === 'dashboard' && liveMap) {
         setTimeout(() => {
             liveMap.invalidateSize();
-            // Re-center map on last marker if available
             if (liveMarker) {
                 liveMap.setView(liveMarker.getLatLng(), liveMap.getZoom());
             }
@@ -208,7 +208,7 @@ function switchTab(tabId) {
     }
 }
 
-// --- DATA FETCHING ---
+// --- DATA FETCHING: LOCATION ---
 
 async function loadLocation(hardwareId) {
     try {
@@ -224,12 +224,11 @@ async function loadLocation(hardwareId) {
                     liveMap.setView(pos, 16); 
                 } else {
                     liveMarker.setLatLng(pos);
-                    // Optional: Pan map to follow device
                     liveMap.setView(pos, liveMap.getZoom()); 
                 }
             }
 
-            // 2. UPDATE TEXT STATS (Matched to dashboard.html IDs)
+            // 2. UPDATE TEXT STATS
             const timeStr = new Date(loc.timestamp).toLocaleTimeString();
             
             const lastSync = document.getElementById('last-synced-time');
@@ -238,7 +237,7 @@ async function loadLocation(hardwareId) {
             const pingEl = document.getElementById('dash-last-ping');
             if(pingEl) pingEl.textContent = "Ping: " + timeStr;
 
-            // Battery (Fixed ID selection)
+            // Battery
             const batText = document.getElementById('dash-battery-text');
             const batBar = document.getElementById('dash-battery-bar');
             if(batText) batText.textContent = (loc.batteryLevel || 0) + '%';
@@ -257,7 +256,6 @@ async function loadLocation(hardwareId) {
             // Speed
             const speedEl = document.getElementById('dash-speed');
             if(speedEl) {
-                // Assuming speed comes from API, or default to 0
                 const speed = loc.speed || 0; 
                 speedEl.innerHTML = `${speed.toFixed(1)} <span class="text-xs text-slate-400 font-normal">mph</span>`;
             }
@@ -265,95 +263,254 @@ async function loadLocation(hardwareId) {
     } catch(e) { console.error("Loc fetch error", e); }
 }
 
+// --- DATA FETCHING: APPS (NEW UI) ---
+
+// Helper for first-letter colors
+function getAppColor(name) {
+    const n = (name || "").toLowerCase();
+    if (n.includes('tiktok')) return 'bg-black';
+    if (n.includes('youtube')) return 'bg-red-600';
+    if (n.includes('roblox')) return 'bg-red-500';
+    if (n.includes('instagram')) return 'bg-pink-600';
+    if (n.includes('facebook')) return 'bg-blue-600';
+    if (n.includes('whatsapp')) return 'bg-green-500';
+    if (n.includes('snapchat')) return 'bg-yellow-400';
+    if (n.includes('minecraft')) return 'bg-green-700';
+    if (n.includes('chrome')) return 'bg-blue-500';
+    return 'bg-indigo-600'; // Default
+}
+
 async function loadApps(hardwareId) {
     try {
         const res = await authenticatedFetch(`/data/${hardwareId}/apps`);
-        const apps = await res.json();
-        const tbody = document.getElementById('app-list-body');
-        
-        tbody.innerHTML = '';
-        let totalMinutes = 0;
-        let blockedCount = 0;
-
-        apps.forEach(app => {
-            totalMinutes += (app.usedToday || 0);
-            if(app.isBlocked) blockedCount++;
-
-            const row = document.createElement('tr');
-            row.className = "hover:bg-slate-50 transition-colors border-b border-slate-50";
-            row.innerHTML = `
-                <td class="px-6 py-4">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-lg uppercase">
-                            ${(app.appName || "?")[0]}
-                        </div>
-                        <div>
-                            <div class="font-bold text-slate-800">${app.appName || app.packageName}</div>
-                            <div class="text-xs text-slate-400 font-mono">${app.packageName}</div>
-                        </div>
-                    </div>
-                </td>
-                <td class="px-6 py-4">
-                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
-                        ${app.usedToday || 0} min
-                    </span>
-                </td>
-                <td class="px-6 py-4 text-center">
-                    <button onclick="updateAppRule('${app.packageName}', ${!app.isBlocked}, ${app.timeLimit})" 
-                        class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${app.isBlocked ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-green-100 text-green-600 hover:bg-green-200'}">
-                        ${app.isBlocked ? 'Blocked' : 'Active'}
-                    </button>
-                </td>
-                <td class="px-6 py-4 text-right">
-                    <div class="flex items-center justify-end gap-2">
-                        <input type="number" class="w-16 p-1.5 border border-slate-300 rounded-lg text-center text-xs focus:ring-2 focus:ring-indigo-500 outline-none transition-all" 
-                            value="${app.timeLimit}" min="0" 
-                            onchange="updateAppRule('${app.packageName}', ${app.isBlocked}, this.value)">
-                        <span class="text-xs text-slate-400">min</span>
-                    </div>
-                </td>
-            `;
-            tbody.appendChild(row);
-        });
-
-        // Update Dashboard Usage Stats
-        const usageEl = document.getElementById('dash-total-usage');
-        const usageBar = document.getElementById('dash-usage-bar');
-        // Calculate hours and minutes
-        const hrs = Math.floor(totalMinutes / 60);
-        const mins = totalMinutes % 60;
-
-        // Display as "2h 15m" or just "45m" if under an hour
-        if(usageEl) {
-            usageEl.textContent = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
-        }
-        if(usageBar) {
-            const pct = Math.min((totalMinutes / 120) * 100, 100); 
-            usageBar.style.width = `${pct}%`;
-        }
-
-        const secCount = document.getElementById('dash-security-count');
-        const secText = document.getElementById('dash-security-text');
-        if(secCount) secCount.textContent = blockedCount;
-        if(secText) secText.textContent = blockedCount > 0 ? `${blockedCount} apps blocked` : "No threats detected";
-
-    } catch(e) { console.error("App fetch error", e); }
+        currentApps = await res.json(); // Store in global state
+        renderAppGrid();
+        updateDashboardUsageStats();
+    } catch(e) { 
+        console.error("App fetch error", e); 
+        const container = document.getElementById('app-grid-container');
+        if(container) container.innerHTML = `<div class="col-span-full text-center text-red-500">Failed to load apps</div>`;
+    }
 }
 
-window.updateAppRule = async (packageName, isBlocked, timeLimit) => {
+function renderAppGrid() {
+    const container = document.getElementById('app-grid-container');
+    if (!container) return;
+    
+    container.innerHTML = '';
+
+    if (currentApps.length === 0) {
+        container.innerHTML = `
+            <div class="col-span-full text-center text-slate-500 py-12 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                <i data-lucide="smartphone" class="mx-auto mb-2 opacity-50" width="32"></i>
+                <p>No apps found on this device.</p>
+            </div>`;
+        if (window.lucide) window.lucide.createIcons();
+        return;
+    }
+
+    currentApps.forEach((app, index) => {
+        // Determine Card State
+        const isLocked = app.isGlobalLocked === true;
+        const hasSchedules = app.schedules && app.schedules.length > 0;
+        
+        // Dynamic Card Styles
+        let cardClasses = "relative bg-white rounded-xl border-2 transition-all overflow-hidden";
+        if (isLocked) {
+            cardClasses += " border-red-200 shadow-sm shadow-red-50";
+        } else if (hasSchedules) {
+            cardClasses += " border-orange-200 shadow-sm shadow-orange-50";
+        } else {
+            cardClasses += " border-slate-100 hover:border-slate-200";
+        }
+
+        const appColor = getAppColor(app.appName);
+        
+        // HTML Construction
+        const cardHTML = `
+            <div class="${cardClasses}">
+                
+                ${isLocked ? `
+                    <div class="bg-red-50 text-red-700 px-4 py-1 text-[10px] font-bold uppercase tracking-wide flex items-center gap-2 border-b border-red-100">
+                        <i data-lucide="lock" width="10"></i> Global Lock Active
+                    </div>
+                ` : ''}
+
+                <div class="p-5">
+                    <div class="flex flex-col md:flex-row justify-between gap-4">
+                        
+                        <div class="flex items-center gap-4">
+                            <div class="${appColor} w-14 h-14 rounded-2xl shadow-sm flex items-center justify-center text-white text-2xl font-bold shrink-0">
+                                ${(app.appName || "?")[0].toUpperCase()}
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-slate-900 text-lg leading-tight">${app.appName || app.packageName}</h4>
+                                <p class="text-xs text-slate-500 font-medium mb-1">${app.category || 'General'}</p>
+                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-600">
+                                    Used: ${app.usedToday || 0}m <span class="text-slate-300">|</span> Limit: ${app.dailyLimit || '∞'}m
+                                </span>
+                            </div>
+                        </div>
+
+                        <button onclick="window.toggleAppLock('${index}')" 
+                            class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm h-10
+                            ${isLocked 
+                                ? 'bg-red-600 text-white hover:bg-red-700 shadow-red-200' 
+                                : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'
+                            }">
+                            <i data-lucide="${isLocked ? 'lock' : 'unlock'}" width="16"></i>
+                            <span>${isLocked ? 'Locked Always' : 'Unlocked'}</span>
+                        </button>
+                    </div>
+
+                    ${!isLocked ? `
+                        <div class="mt-6 pt-4 border-t border-slate-100">
+                            <div class="flex items-center justify-between mb-3">
+                                <h5 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                    <i data-lucide="clock" width="12" class="text-orange-500"></i> Allowed Schedules
+                                </h5>
+                                <button onclick="window.addSchedule('${index}')" class="text-xs font-bold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 px-2 py-1 rounded transition-colors flex items-center gap-1">
+                                    <i data-lucide="plus" width="12"></i> Add Slot
+                                </button>
+                            </div>
+
+                            <div class="space-y-2">
+                                ${(!app.schedules || app.schedules.length === 0) ? 
+                                    `<p class="text-xs text-slate-400 italic py-2">No specific schedules. App is allowed until daily limit is reached.</p>` 
+                                    : 
+                                    app.schedules.map(slot => `
+                                        <div class="flex items-center gap-2 bg-orange-50/50 border border-orange-100 p-2 rounded-lg">
+                                            <span class="text-[10px] font-bold text-orange-600 uppercase bg-white px-1.5 py-0.5 rounded border border-orange-100">Everyday</span>
+                                            <div class="flex-1 flex items-center gap-2">
+                                                <input type="time" value="${slot.start}" 
+                                                    onchange="window.saveSchedule('${index}', '${slot.id}', 'start', this.value)"
+                                                    class="bg-white border border-slate-200 rounded text-xs px-1 py-1 text-slate-600 w-full focus:border-orange-400 outline-none">
+                                                <span class="text-slate-300">-</span>
+                                                <input type="time" value="${slot.end}" 
+                                                    onchange="window.saveSchedule('${index}', '${slot.id}', 'end', this.value)"
+                                                    class="bg-white border border-slate-200 rounded text-xs px-1 py-1 text-slate-600 w-full focus:border-orange-400 outline-none">
+                                            </div>
+                                            <button onclick="window.removeSchedule('${index}', '${slot.id}')" class="text-orange-300 hover:text-red-500 transition-colors p-1">
+                                                <i data-lucide="trash-2" width="14"></i>
+                                            </button>
+                                        </div>
+                                    `).join('')
+                                }
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+        container.insertAdjacentHTML('beforeend', cardHTML);
+    });
+
+    if (window.lucide) window.lucide.createIcons();
+}
+
+function updateDashboardUsageStats() {
+    let totalMinutes = 0;
+    let blockedCount = 0;
+    currentApps.forEach(app => {
+        totalMinutes += (app.usedToday || 0);
+        if(app.isGlobalLocked) blockedCount++;
+    });
+
+    const usageEl = document.getElementById('dash-total-usage');
+    const usageBar = document.getElementById('dash-usage-bar');
+    const hrs = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+
+    if(usageEl) usageEl.textContent = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+    if(usageBar) {
+        const pct = Math.min((totalMinutes / 120) * 100, 100); 
+        usageBar.style.width = `${pct}%`;
+    }
+
+    const secCount = document.getElementById('dash-security-count');
+    const secText = document.getElementById('dash-security-text');
+    if(secCount) secCount.textContent = blockedCount;
+    if(secText) secText.textContent = blockedCount > 0 ? `${blockedCount} apps locked` : "No restrictions active";
+}
+
+// --- APP ACTIONS (Exposed to Window for HTML OnClick) ---
+
+window.toggleAppLock = async (idx) => {
+    if (!currentDevice) return;
+    const app = currentApps[idx];
+    const newStatus = !app.isGlobalLocked;
+    
+    // 1. Optimistic UI Update (Update local state & re-render immediately)
+    app.isGlobalLocked = newStatus;
+    renderAppGrid(); 
+    updateDashboardUsageStats();
+
+    // 2. Server Call
+    try {
+        await authenticatedFetch('/rules/update', {
+            method: 'POST',
+            body: JSON.stringify({
+                deviceId: currentDevice.deviceId,
+                packageName: app.packageName,
+                isGlobalLocked: newStatus,
+                isBlocked: newStatus // Keeping isBlocked for compatibility if needed
+            })
+        });
+    } catch (err) {
+        console.error('Failed to update lock', err);
+        // Revert on failure
+        app.isGlobalLocked = !newStatus;
+        renderAppGrid();
+        alert("Failed to save changes. Check connection.");
+    }
+};
+
+window.addSchedule = async (idx) => {
+    const app = currentApps[idx];
+    if (!app.schedules) app.schedules = [];
+    
+    const newSlot = {
+        id: Date.now().toString(),
+        day: 'Everyday',
+        start: '12:00',
+        end: '13:00'
+    };
+    app.schedules.push(newSlot);
+    renderAppGrid();
+
+    // Sync changes
+    syncAppRules(app);
+};
+
+window.removeSchedule = async (appIdx, scheduleId) => {
+    const app = currentApps[appIdx];
+    app.schedules = app.schedules.filter(s => s.id !== scheduleId);
+    renderAppGrid();
+    syncAppRules(app);
+};
+
+window.saveSchedule = async (appIdx, scheduleId, field, value) => {
+    const app = currentApps[appIdx];
+    const slot = app.schedules.find(s => s.id === scheduleId);
+    if (slot) {
+        slot[field] = value;
+        syncAppRules(app);
+    }
+};
+
+async function syncAppRules(app) {
     if (!currentDevice) return;
     try {
         await authenticatedFetch('/rules/update', {
             method: 'POST',
             body: JSON.stringify({
                 deviceId: currentDevice.deviceId,
-                packageName,
-                isBlocked,
-                timeLimit: parseInt(timeLimit) || 0
+                packageName: app.packageName,
+                schedules: app.schedules,
+                isGlobalLocked: app.isGlobalLocked
             })
         });
-        loadApps(currentDevice.deviceId);
     } catch (err) {
-        console.error('Failed to update rule', err);
+        console.error('Failed to sync rules', err);
     }
-};
+}
