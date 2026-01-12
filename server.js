@@ -303,6 +303,7 @@ app.post('/api/web/update', authenticateToken, async (req, res) => {
     }
 });
 
+
 // 3. AI Analysis Endpoint
 app.post('/api/web/analyze', authenticateToken, async (req, res) => {
     try {
@@ -310,15 +311,20 @@ app.post('/api/web/analyze', authenticateToken, async (req, res) => {
         
         // Prepare prompt for Gemini
         const historyText = history.map(h => `- [${h.riskScore}/100] ${h.title} (${h.url})`).join('\n');
+        
         const prompt = `
-            Act as a parental safety expert. 
-            Blocked Categories: ${blockedCategories.join(', ')}.
+            Act as a parental safety expert AI.
             
-            Analyze this browsing history for risks:
+            **Configuration:**
+            The parent has explicitly blocked these categories: ${blockedCategories.length > 0 ? blockedCategories.join(', ').toUpperCase() : 'NONE (Monitor only)'}.
+            
+            **Child's History:**
             ${historyText}
             
-            Identify patterns, flag suspicious URLs that aren't blocked yet, and summarize the child's online behavior in 2-3 sentences. 
-            Focus on safety.
+            **Instructions:**
+            1. Analyze the history against the BLOCKED CATEGORIES. If the child visited sites that fit these categories, flag them as HIGH RISK.
+            2. Even if no custom URL blacklist exists, use your knowledge to identify sites that match the blocked categories.
+            3. Provide a 2-sentence summary of the child's behavior and any immediate actions the parent should take.
         `;
 
         // Call Gemini API (Using fetch)
@@ -344,6 +350,7 @@ app.post('/api/web/analyze', authenticateToken, async (req, res) => {
         res.status(500).json({ error: "AI Analysis Failed" });
     }
 });
+
 
 
 

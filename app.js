@@ -148,7 +148,12 @@ async function selectDevice(device) {
     modifiedApps.clear();
     toggleSaveButton();
 
-    await Promise.all([ loadLocation(device.deviceId), loadApps(device.deviceId) ]);
+    // [UPDATED] Added loadWebData to the Promise.all
+    await Promise.all([ 
+        loadLocation(device.deviceId), 
+        loadApps(device.deviceId),
+        loadWebData(device.deviceId) 
+    ]);
 
     if (!liveMap && document.getElementById('liveMap')) {
         liveMap = L.map('liveMap').setView([20.5937, 78.9629], 5); 
@@ -519,12 +524,11 @@ window.saveAllChanges = async () => {
 
 
 
-// ... [Existing Code] ...
 
 // --- WEB SAFETY LOGIC ---
 
 let webFilterData = {
-    blockedCategories: [],
+    blockedCategories: [], // Default AI Categories
     blockedUrls: [],
     history: []
 };
@@ -543,7 +547,7 @@ async function loadWebData(hardwareId) {
 
 // 2. Render Config (Left Panel)
 function renderWebConfig() {
-    // Categories
+    // Categories (The "Buttons" to show if no URLs are present)
     const categories = ['pornography', 'gambling', 'violence', 'social-media'];
     const catContainer = document.getElementById('category-list');
     
@@ -551,11 +555,16 @@ function renderWebConfig() {
         catContainer.innerHTML = categories.map(cat => {
             const isBlocked = webFilterData.blockedCategories.includes(cat);
             return `
-                <div class="flex items-center justify-between group">
-                    <span class="text-sm font-medium text-slate-700 capitalize group-hover:text-indigo-600 transition-colors">${cat.replace('-', ' ')}</span>
+                <div class="flex items-center justify-between group py-2 border-b border-slate-50 last:border-0">
+                    <div class="flex items-center gap-3">
+                         <div class="p-1.5 rounded-md ${isBlocked ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'}">
+                            <i data-lucide="${isBlocked ? 'shield-alert' : 'shield'}" width="16"></i>
+                         </div>
+                         <span class="text-sm font-medium text-slate-700 capitalize group-hover:text-indigo-600 transition-colors">${cat.replace('-', ' ')}</span>
+                    </div>
                     <button onclick="window.toggleWebCategory('${cat}')" 
-                        class="w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-300 ${isBlocked ? 'bg-indigo-600' : 'bg-slate-300'}">
-                        <div class="bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${isBlocked ? 'translate-x-5' : 'translate-x-0'}"></div>
+                        class="w-10 h-5 flex items-center rounded-full p-1 transition-colors duration-300 focus:outline-none ${isBlocked ? 'bg-indigo-600' : 'bg-slate-300'}">
+                        <div class="bg-white w-3 h-3 rounded-full shadow-md transform transition-transform duration-300 ${isBlocked ? 'translate-x-5' : 'translate-x-0'}"></div>
                     </button>
                 </div>
             `;
@@ -565,20 +574,26 @@ function renderWebConfig() {
     // URL List
     const urlContainer = document.getElementById('url-list');
     if (urlContainer) {
-        urlContainer.innerHTML = webFilterData.blockedUrls.map(url => `
-            <div class="flex items-center justify-between bg-slate-50 px-3 py-2 rounded-lg border border-transparent hover:border-red-100 transition-all group">
-                <div class="flex items-center gap-2 overflow-hidden">
-                    <i data-lucide="globe" width="12" class="text-slate-400"></i>
-                    <span class="text-xs font-bold text-red-500 truncate">${url}</span>
-                </div>
-                <button onclick="window.removeBlockedUrl('${url}')" class="text-slate-300 hover:text-red-500 transition-colors">
-                    <i data-lucide="x" width="14"></i>
-                </button>
-            </div>
-        `).join('');
-        
         if(webFilterData.blockedUrls.length === 0) {
-            urlContainer.innerHTML = `<div class="text-center text-xs text-slate-400 py-4 italic">No specific URLs blocked</div>`;
+            // [UPDATED] Visual cue that we are relying on Categories/AI
+            urlContainer.innerHTML = `
+                <div class="flex flex-col items-center justify-center text-center py-6 px-4 bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
+                    <i data-lucide="shield-check" class="text-green-500 mb-2" width="24"></i>
+                    <p class="text-xs text-slate-500 font-medium">No custom URLs blocked.</p>
+                    <p class="text-[10px] text-slate-400 mt-1">Protection is active using the <b>Blocked Categories</b> above.</p>
+                </div>`;
+        } else {
+            urlContainer.innerHTML = webFilterData.blockedUrls.map(url => `
+                <div class="flex items-center justify-between bg-white px-3 py-2.5 rounded-lg border border-slate-200 shadow-sm hover:border-red-200 transition-all group">
+                    <div class="flex items-center gap-2 overflow-hidden">
+                        <i data-lucide="globe" width="14" class="text-slate-400"></i>
+                        <span class="text-xs font-bold text-slate-700 truncate">${url}</span>
+                    </div>
+                    <button onclick="window.removeBlockedUrl('${url}')" class="text-slate-300 hover:text-red-500 hover:bg-red-50 p-1 rounded transition-colors">
+                        <i data-lucide="x" width="14"></i>
+                    </button>
+                </div>
+            `).join('');
         }
     }
     
@@ -591,28 +606,36 @@ function renderWebHistory() {
     if (!container) return;
 
     if (!webFilterData.history || webFilterData.history.length === 0) {
-        container.innerHTML = `<div class="text-center text-slate-400 py-12">No browsing history available</div>`;
+        container.innerHTML = `<div class="text-center text-slate-400 py-12 flex flex-col items-center"><i data-lucide="history" class="mb-2 opacity-50" width="24"></i>No browsing history available</div>`;
+        if (window.lucide) window.lucide.createIcons();
         return;
     }
 
     container.innerHTML = webFilterData.history.map(item => {
         const score = item.riskScore || 0;
-        let badgeClass = "bg-green-100 text-green-700";
-        if (score > 80) badgeClass = "bg-red-100 text-red-700";
-        else if (score > 30) badgeClass = "bg-yellow-100 text-yellow-700";
+        let badgeClass = "bg-green-100 text-green-700 border-green-200";
+        let scoreLabel = "Safe";
+        
+        if (score > 80) { 
+            badgeClass = "bg-red-100 text-red-700 border-red-200";
+            scoreLabel = "High Risk";
+        } else if (score > 30) {
+            badgeClass = "bg-orange-100 text-orange-700 border-orange-200";
+            scoreLabel = "Medium";
+        }
 
         const time = new Date(item.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
         return `
-            <div class="px-4 py-3 border-b border-slate-50 hover:bg-slate-50/50 transition-colors grid grid-cols-12 gap-4 items-center">
-                <div class="col-span-3 text-xs font-medium text-slate-500">${time}</div>
+            <div class="px-4 py-3 border-b border-slate-100 hover:bg-slate-50 transition-colors grid grid-cols-12 gap-4 items-center group">
+                <div class="col-span-3 text-xs font-mono text-slate-400">${time}</div>
                 <div class="col-span-7 overflow-hidden">
-                    <div class="text-sm font-bold text-slate-800 truncate">${item.title}</div>
+                    <div class="text-sm font-bold text-slate-800 truncate group-hover:text-indigo-600 transition-colors">${item.title}</div>
                     <div class="text-[10px] text-slate-400 truncate font-mono">${item.url}</div>
                 </div>
                 <div class="col-span-2 text-right">
-                    <span class="${badgeClass} px-2 py-0.5 rounded text-[10px] font-bold border border-current/10">
-                        ${score}/100
+                    <span class="${badgeClass} px-2 py-0.5 rounded text-[10px] font-bold border inline-block min-w-[60px] text-center">
+                        ${scoreLabel}
                     </span>
                 </div>
             </div>
@@ -620,7 +643,7 @@ function renderWebHistory() {
     }).join('');
 }
 
-// 4. Actions (Immediate Save)
+// 4. Actions (Immediate Save to MongoDB)
 async function syncWebConfig() {
     if (!currentDevice) return;
     try {
@@ -632,7 +655,6 @@ async function syncWebConfig() {
                 blockedUrls: webFilterData.blockedUrls
             })
         });
-        // Optional: Show toast
     } catch(e) { console.error("Sync failed", e); }
 }
 
@@ -643,24 +665,26 @@ window.toggleWebCategory = (cat) => {
         webFilterData.blockedCategories.push(cat);
     }
     renderWebConfig();
-    syncWebConfig();
+    syncWebConfig(); // Saves to DB
 };
 
 window.addBlockedUrl = () => {
     const input = document.getElementById('new-url-input');
     const url = input.value.trim();
+    
+    // Simple validation
     if (url && !webFilterData.blockedUrls.includes(url)) {
         webFilterData.blockedUrls.push(url);
-        input.value = '';
-        renderWebConfig();
-        syncWebConfig();
+        input.value = ''; // Clear input
+        renderWebConfig(); // Update UI
+        syncWebConfig(); // Save to DB
     }
 };
 
 window.removeBlockedUrl = (url) => {
     webFilterData.blockedUrls = webFilterData.blockedUrls.filter(u => u !== url);
     renderWebConfig();
-    syncWebConfig();
+    syncWebConfig(); // Save to DB
 };
 
 // 5. AI Analysis
@@ -670,7 +694,6 @@ window.analyzeWebSafety = async () => {
     const box = document.getElementById('ai-insight-box');
     const resultText = document.getElementById('ai-result-text');
 
-    // Loading State
     btnText.textContent = "Analyzing...";
     btn.classList.add('opacity-75', 'cursor-wait');
     
@@ -684,7 +707,6 @@ window.analyzeWebSafety = async () => {
         });
         const data = await res.json();
         
-        // Show Result
         resultText.innerText = data.analysis || "No insights found.";
         box.classList.remove('hidden');
         box.classList.add('animate-fade-in');
@@ -696,8 +718,4 @@ window.analyzeWebSafety = async () => {
         btn.classList.remove('opacity-75', 'cursor-wait');
     }
 };
-
-// --- UPDATED SELECT DEVICE ---
-// (Add this call inside your existing selectDevice function)
-// await loadWebData(device.deviceId);
 
