@@ -420,7 +420,92 @@ app.delete('/api/zones/:zoneId', authenticateToken, async (req, res) => {
 
 
 
+// Alert Schema to store notifications
+const AlertSchema = new mongoose.Schema({
+    deviceId: String,
+    message: String,
+    type: { type: String, enum: ['info', 'warning', 'critical'], default: 'info' },
+    timestamp: { type: Date, default: Date.now },
+    isRead: { type: Boolean, default: false }
+});
+const Alert = mongoose.model('Alert', AlertSchema);
 
+// ... [Existing Routes] ...
+
+// HELPER: Ray-Casting Algorithm for Point in Polygon
+function isPointInPolygon(point, vs) {
+    // point = {lat, lng}, vs = [{lat, lng}, ...]
+    let x = point.lat, y = point.lng;
+    let inside = false;
+    for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+        let xi = vs[i].lat, yi = vs[i].lng;
+        let xj = vs[j].lat, yj = vs[j].lng;
+        
+        let intersect = ((yi > y) != (yj > y)) &&
+            (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+    }
+    return inside;
+}
+
+// UPDATED: Location Endpoint with Calculation Logic
+app.post('/api/location', async (req, res) => {
+    try {
+        const { deviceId, latitude, longitude, batteryLevel } = req.body;
+        
+        // 1. Save Location
+        const loc = new Location({ deviceId, latitude, longitude, batteryLevel });
+        await loc.save();
+
+        // 2. Perform Geofence Calculation
+        // Fetch all zones for this device
+        const zones = await Zone.find({ deviceId });
+        
+        for (const zone of zones) {
+            const isInside = isPointInPolygon({ lat: latitude, lng: longitude }, zone.points);
+            
+            // Logic: 
+            // If Type is 'danger' AND user is INSIDE -> Alert
+            // If Type is 'safe' -> You might alert on EXIT (requires tracking previous state), 
+            // for simplicity here we alert on ENTRY to safe zone as a "Check-in" notification.
+            
+            if (isInside) {
+                // Check if we recently sent an alert to avoid spamming (e.g., last 5 mins)
+                const lastAlert = await Alert.findOne({ 
+                    deviceId, 
+                    message: zone.alertMessage 
+                }).sort({ timestamp: -1 });
+
+                const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000);
+                
+                if (!lastAlert || lastAlert.timestamp < fiveMinsAgo) {
+                    // Create Notification
+                    console.log(`[GEOFENCE] Breach detected: ${zone.name}`);
+                    const alertType = zone.type === 'danger' ? 'critical' : 'info';
+                    
+                    await new Alert({
+                        deviceId,
+                        message: `Geofence Trigger: ${zone.alertMessage}`,
+                        type: alertType
+                    }).save();
+                }
+            }
+        }
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Endpoint to fetch alerts (Frontend can poll this)
+app.get('/api/alerts/:deviceId', authenticateToken, async (req, res) => {
+    const alerts = await Alert.find({ deviceId: req.params.deviceId }).sort({ timestamp: -1 }).limit(10);
+    res.json(alerts);
+});
+
+// -------------------------------------------------------
 
 
 

@@ -725,10 +725,16 @@ window.analyzeWebSafety = async () => {
 
 
 
+// ... [Existing Setup Code: API_URL, selectDevice, etc] ...
 
 // --- GEOFENCING LOGIC ---
 
 let currentZones = [];
+let geofenceMap = null;
+let drawingLayer = null; // LayerGroup for drawing points/lines
+let drawnPoints = []; // Array of {lat, lng}
+let isDrawing = false;
+let zoneLayers = []; // Store references to rendered polygons to remove them easily
 
 // 1. Fetch Zones
 async function loadZones(hardwareId) {
@@ -736,12 +742,157 @@ async function loadZones(hardwareId) {
         const res = await authenticatedFetch(`/zones/${hardwareId}`);
         currentZones = await res.json();
         renderZoneList();
+        renderZonesOnMap();
     } catch(e) {
         console.error("Zone fetch error", e);
     }
 }
 
-// 2. Render Zone List (Left Panel)
+// 2. Initialize/Render Map
+function initGeofenceMap() {
+    if (!geofenceMap && document.getElementById('geofenceMap')) {
+        // Default center (India)
+        geofenceMap = L.map('geofenceMap').setView([20.5937, 78.9629], 5);
+        
+        // Add OpenStreetMap Tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(geofenceMap);
+
+        // Click Handler for Drawing
+        geofenceMap.on('click', (e) => {
+            if (isDrawing) {
+                addDrawingPoint(e.latlng);
+            }
+        });
+    }
+    
+    // Invalidate size to ensure map renders correctly when tab switches
+    setTimeout(() => {
+        if(geofenceMap) geofenceMap.invalidateSize();
+    }, 200);
+}
+
+// 3. Render Zones Visuals on Map
+function renderZonesOnMap() {
+    if (!geofenceMap) return;
+
+    // Clear old layers
+    zoneLayers.forEach(layer => geofenceMap.removeLayer(layer));
+    zoneLayers = [];
+
+    currentZones.forEach(zone => {
+        if (!zone.points || zone.points.length < 3) return;
+
+        const color = zone.type === 'safe' ? '#22c55e' : '#ef4444'; // Green vs Red
+        const polygon = L.polygon(zone.points, {
+            color: color,
+            fillColor: color,
+            fillOpacity: 0.2,
+            weight: 2
+        }).addTo(geofenceMap);
+        
+        polygon.bindPopup(`<b>${zone.name}</b><br>${zone.type === 'safe' ? 'Safe Zone' : 'Danger Zone'}`);
+        zoneLayers.push(polygon);
+    });
+}
+
+// 4. Drawing Logic (Frontend)
+window.startDrawingZone = () => {
+    if(!geofenceMap) initGeofenceMap();
+    
+    isDrawing = true;
+    drawnPoints = [];
+    
+    // UI Updates
+    document.getElementById('geofenceMap').classList.add('drawing-cursor');
+    document.getElementById('map-controls').classList.remove('hidden');
+    document.getElementById('drawing-instructions').classList.remove('hidden');
+    
+    // Create temporary layer for drawing
+    if (drawingLayer) geofenceMap.removeLayer(drawingLayer);
+    drawingLayer = L.layerGroup().addTo(geofenceMap);
+};
+
+function addDrawingPoint(latlng) {
+    drawnPoints.push(latlng);
+    
+    // Visual feedback
+    L.circleMarker(latlng, { radius: 5, color: '#4f46e5' }).addTo(drawingLayer);
+    
+    if (drawnPoints.length > 1) {
+        L.polyline(drawnPoints, { color: '#4f46e5', dashArray: '5, 5' }).addTo(drawingLayer);
+    }
+}
+
+window.cancelDrawing = () => {
+    isDrawing = false;
+    drawnPoints = [];
+    if (drawingLayer) drawingLayer.clearLayers();
+    
+    document.getElementById('geofenceMap').classList.remove('drawing-cursor');
+    document.getElementById('map-controls').classList.add('hidden');
+    document.getElementById('drawing-instructions').classList.add('hidden');
+};
+
+window.finishDrawing = () => {
+    if (drawnPoints.length < 3) {
+        alert("A zone must have at least 3 points.");
+        return;
+    }
+    
+    // Show Modal to save
+    document.getElementById('create-zone-modal').classList.remove('hidden');
+    document.getElementById('zone-name').value = '';
+    document.getElementById('zone-alert').value = 'Entered Zone';
+};
+
+window.closeZoneModal = () => {
+    document.getElementById('create-zone-modal').classList.add('hidden');
+};
+
+// 5. Save Logic (Connects to Server)
+window.saveNewZone = async () => {
+    const name = document.getElementById('zone-name').value;
+    const type = document.querySelector('input[name="zone-type"]:checked').value;
+    const alertMsg = document.getElementById('zone-alert').value;
+
+    if (!name) return alert("Name is required");
+
+    try {
+        const res = await authenticatedFetch('/zones/add', {
+            method: 'POST',
+            body: JSON.stringify({
+                deviceId: currentDevice.deviceId,
+                name: name,
+                type: type,
+                alertMessage: alertMsg,
+                points: drawnPoints // Sending the clicked points
+            })
+        });
+        
+        // Cleanup
+        window.closeZoneModal();
+        window.cancelDrawing();
+        
+        // Refresh
+        await loadZones(currentDevice.deviceId);
+
+    } catch (e) {
+        alert("Failed to save zone.");
+    }
+};
+
+window.deleteZone = async (id) => {
+    if(!confirm("Delete this zone?")) return;
+    try {
+        await authenticatedFetch(`/zones/${id}`, { method: 'DELETE' });
+        await loadZones(currentDevice.deviceId);
+    } catch(e) { alert("Delete failed"); }
+};
+
+// 6. Render List (Side Panel)
 function renderZoneList() {
     const container = document.getElementById('zone-list-container');
     if (!container) return;
@@ -758,113 +909,22 @@ function renderZoneList() {
 
     container.innerHTML = currentZones.map(zone => {
         const isSafe = zone.type === 'safe';
-        const badgeClass = isSafe ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700';
-        const iconName = isSafe ? 'shield-check' : 'triangle-alert';
-        const typeLabel = isSafe ? 'Safe Zone' : 'Danger Zone';
-
         return `
-            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 cursor-pointer transition-all hover:border-indigo-300 group relative overflow-hidden">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 cursor-pointer hover:border-indigo-300">
                 <div class="flex justify-between items-start">
                     <div>
-                        <h4 class="font-bold text-slate-800 text-base leading-tight">${zone.name}</h4>
-                        <div class="inline-flex items-center gap-1.5 mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${badgeClass}">
-                            <i data-lucide="${iconName}" width="10"></i>
-                            <span>${typeLabel}</span>
-                        </div>
+                        <h4 class="font-bold text-slate-800">${zone.name}</h4>
+                        <span class="text-[10px] font-bold uppercase ${isSafe ? 'text-green-600 bg-green-100' : 'text-red-600 bg-red-100'} px-2 py-0.5 rounded-full">
+                            ${isSafe ? 'Safe Zone' : 'Danger Zone'}
+                        </span>
                     </div>
-                    
-                    <button onclick="window.deleteZone('${zone._id}')" class="text-slate-300 hover:text-red-500 transition-colors p-1" title="Delete Zone">
-                        <i data-lucide="trash-2" width="16"></i>
-                    </button>
-                </div>
-
-                <div class="mt-3 bg-slate-50 p-2.5 rounded-lg border border-slate-100 flex items-start gap-2">
-                    <i data-lucide="bell-ring" class="text-slate-400 shrink-0 mt-0.5" width="12"></i>
-                    <p class="text-xs text-slate-500 leading-snug">
-                        <span class="font-semibold text-slate-600">Alert:</span> "${zone.alertMessage || 'No message set'}"
-                    </p>
+                    <button onclick="window.deleteZone('${zone._id}')" class="text-slate-300 hover:text-red-500"><i data-lucide="trash-2" width="16"></i></button>
                 </div>
             </div>
         `;
     }).join('');
-
     if (window.lucide) window.lucide.createIcons();
 }
-
-// 3. Create Zone Logic (Simulation)
-window.initCreateZone = () => {
-    // Open the Modal
-    document.getElementById('create-zone-modal').classList.remove('hidden');
-    
-    // Set Default Alert based on initial radio
-    document.getElementById('zone-name').value = '';
-    document.getElementById('zone-alert').value = 'Arrived at location';
-};
-
-window.saveNewZone = async () => {
-    if (!currentDevice) return;
-
-    const name = document.getElementById('zone-name').value;
-    const type = document.querySelector('input[name="zone-type"]:checked').value;
-    const alertMsg = document.getElementById('zone-alert').value;
-
-    if (!name) {
-        alert("Please enter a zone name.");
-        return;
-    }
-
-    // Mock Polygon Generation (Since we are using a placeholder map)
-    // In a real app, this would come from the Leaflet Draw plugin
-    const baseLat = 20.5937; 
-    const baseLng = 78.9629;
-    const mockPoints = [
-        { lat: baseLat, lng: baseLng },
-        { lat: baseLat + 0.01, lng: baseLng },
-        { lat: baseLat + 0.01, lng: baseLng + 0.01 },
-        { lat: baseLat, lng: baseLng + 0.01 },
-        { lat: baseLat, lng: baseLng } // Close loop
-    ];
-
-    try {
-        const btn = document.querySelector('#create-zone-modal button:last-child');
-        const oldText = btn.innerText;
-        btn.innerText = "Saving...";
-        
-        const res = await authenticatedFetch('/zones/add', {
-            method: 'POST',
-            body: JSON.stringify({
-                deviceId: currentDevice.deviceId,
-                name: name,
-                type: type,
-                alertMessage: alertMsg,
-                points: mockPoints
-            })
-        });
-
-        const data = await res.json();
-        
-        if (data.success) {
-            document.getElementById('create-zone-modal').classList.add('hidden');
-            await loadZones(currentDevice.deviceId); // Refresh list
-        }
-        btn.innerText = oldText;
-
-    } catch (e) {
-        console.error("Failed to save zone", e);
-        alert("Error saving zone");
-    }
-};
-
-window.deleteZone = async (id) => {
-    if(!confirm("Are you sure you want to delete this zone?")) return;
-    
-    try {
-        await authenticatedFetch(`/zones/${id}`, { method: 'DELETE' });
-        await loadZones(currentDevice.deviceId);
-    } catch(e) {
-        alert("Failed to delete zone");
-    }
-};
 
 // ------------------------------------------------------------------------------------------
 
