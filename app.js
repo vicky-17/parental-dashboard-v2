@@ -511,3 +511,193 @@ window.saveAllChanges = async () => {
         alert("Failed to save changes. Please try again.");
     }
 };
+
+
+
+
+
+
+
+
+// ... [Existing Code] ...
+
+// --- WEB SAFETY LOGIC ---
+
+let webFilterData = {
+    blockedCategories: [],
+    blockedUrls: [],
+    history: []
+};
+
+// 1. Fetch Data
+async function loadWebData(hardwareId) {
+    try {
+        const res = await authenticatedFetch(`/web/${hardwareId}`);
+        webFilterData = await res.json();
+        renderWebConfig();
+        renderWebHistory();
+    } catch(e) {
+        console.error("Web Data Error", e);
+    }
+}
+
+// 2. Render Config (Left Panel)
+function renderWebConfig() {
+    // Categories
+    const categories = ['pornography', 'gambling', 'violence', 'social-media'];
+    const catContainer = document.getElementById('category-list');
+    
+    if (catContainer) {
+        catContainer.innerHTML = categories.map(cat => {
+            const isBlocked = webFilterData.blockedCategories.includes(cat);
+            return `
+                <div class="flex items-center justify-between group">
+                    <span class="text-sm font-medium text-slate-700 capitalize group-hover:text-indigo-600 transition-colors">${cat.replace('-', ' ')}</span>
+                    <button onclick="window.toggleWebCategory('${cat}')" 
+                        class="w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-300 ${isBlocked ? 'bg-indigo-600' : 'bg-slate-300'}">
+                        <div class="bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${isBlocked ? 'translate-x-5' : 'translate-x-0'}"></div>
+                    </button>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // URL List
+    const urlContainer = document.getElementById('url-list');
+    if (urlContainer) {
+        urlContainer.innerHTML = webFilterData.blockedUrls.map(url => `
+            <div class="flex items-center justify-between bg-slate-50 px-3 py-2 rounded-lg border border-transparent hover:border-red-100 transition-all group">
+                <div class="flex items-center gap-2 overflow-hidden">
+                    <i data-lucide="globe" width="12" class="text-slate-400"></i>
+                    <span class="text-xs font-bold text-red-500 truncate">${url}</span>
+                </div>
+                <button onclick="window.removeBlockedUrl('${url}')" class="text-slate-300 hover:text-red-500 transition-colors">
+                    <i data-lucide="x" width="14"></i>
+                </button>
+            </div>
+        `).join('');
+        
+        if(webFilterData.blockedUrls.length === 0) {
+            urlContainer.innerHTML = `<div class="text-center text-xs text-slate-400 py-4 italic">No specific URLs blocked</div>`;
+        }
+    }
+    
+    if (window.lucide) window.lucide.createIcons();
+}
+
+// 3. Render History (Right Panel)
+function renderWebHistory() {
+    const container = document.getElementById('history-rows');
+    if (!container) return;
+
+    if (!webFilterData.history || webFilterData.history.length === 0) {
+        container.innerHTML = `<div class="text-center text-slate-400 py-12">No browsing history available</div>`;
+        return;
+    }
+
+    container.innerHTML = webFilterData.history.map(item => {
+        const score = item.riskScore || 0;
+        let badgeClass = "bg-green-100 text-green-700";
+        if (score > 80) badgeClass = "bg-red-100 text-red-700";
+        else if (score > 30) badgeClass = "bg-yellow-100 text-yellow-700";
+
+        const time = new Date(item.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+        return `
+            <div class="px-4 py-3 border-b border-slate-50 hover:bg-slate-50/50 transition-colors grid grid-cols-12 gap-4 items-center">
+                <div class="col-span-3 text-xs font-medium text-slate-500">${time}</div>
+                <div class="col-span-7 overflow-hidden">
+                    <div class="text-sm font-bold text-slate-800 truncate">${item.title}</div>
+                    <div class="text-[10px] text-slate-400 truncate font-mono">${item.url}</div>
+                </div>
+                <div class="col-span-2 text-right">
+                    <span class="${badgeClass} px-2 py-0.5 rounded text-[10px] font-bold border border-current/10">
+                        ${score}/100
+                    </span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// 4. Actions (Immediate Save)
+async function syncWebConfig() {
+    if (!currentDevice) return;
+    try {
+        await authenticatedFetch('/web/update', {
+            method: 'POST',
+            body: JSON.stringify({
+                deviceId: currentDevice.deviceId,
+                blockedCategories: webFilterData.blockedCategories,
+                blockedUrls: webFilterData.blockedUrls
+            })
+        });
+        // Optional: Show toast
+    } catch(e) { console.error("Sync failed", e); }
+}
+
+window.toggleWebCategory = (cat) => {
+    if (webFilterData.blockedCategories.includes(cat)) {
+        webFilterData.blockedCategories = webFilterData.blockedCategories.filter(c => c !== cat);
+    } else {
+        webFilterData.blockedCategories.push(cat);
+    }
+    renderWebConfig();
+    syncWebConfig();
+};
+
+window.addBlockedUrl = () => {
+    const input = document.getElementById('new-url-input');
+    const url = input.value.trim();
+    if (url && !webFilterData.blockedUrls.includes(url)) {
+        webFilterData.blockedUrls.push(url);
+        input.value = '';
+        renderWebConfig();
+        syncWebConfig();
+    }
+};
+
+window.removeBlockedUrl = (url) => {
+    webFilterData.blockedUrls = webFilterData.blockedUrls.filter(u => u !== url);
+    renderWebConfig();
+    syncWebConfig();
+};
+
+// 5. AI Analysis
+window.analyzeWebSafety = async () => {
+    const btn = document.getElementById('ai-trigger-btn');
+    const btnText = document.getElementById('ai-btn-text');
+    const box = document.getElementById('ai-insight-box');
+    const resultText = document.getElementById('ai-result-text');
+
+    // Loading State
+    btnText.textContent = "Analyzing...";
+    btn.classList.add('opacity-75', 'cursor-wait');
+    
+    try {
+        const res = await authenticatedFetch('/web/analyze', {
+            method: 'POST',
+            body: JSON.stringify({
+                history: webFilterData.history,
+                blockedCategories: webFilterData.blockedCategories
+            })
+        });
+        const data = await res.json();
+        
+        // Show Result
+        resultText.innerText = data.analysis || "No insights found.";
+        box.classList.remove('hidden');
+        box.classList.add('animate-fade-in');
+
+    } catch (e) {
+        alert("Analysis failed. Please try again.");
+    } finally {
+        btnText.textContent = "Analyze Risks with AI";
+        btn.classList.remove('opacity-75', 'cursor-wait');
+    }
+};
+
+// --- UPDATED SELECT DEVICE ---
+// (Add this call inside your existing selectDevice function)
+// await loadWebData(device.deviceId);
+

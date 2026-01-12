@@ -27,6 +27,10 @@
             <span class="font-bold text-lg text-slate-800 tracking-tight">ParentalWatch</span>
         </div>
         
+
+
+
+       <!-- Nav Bar  -->
         <nav class="flex-1 p-4 space-y-1 overflow-y-auto custom-scrollbar">
             <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item active w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-600 hover:bg-slate-50">
                 <i data-lucide="activity" width="18"></i> Dashboard
@@ -44,6 +48,12 @@
                 <i data-lucide="settings" width="18"></i> Settings
             </button>
         </nav>
+        <!-- -------- -->
+
+
+
+
+
 
         <div class="p-4 border-t border-slate-100 bg-slate-50/50">
             <div class="flex items-center justify-between mb-2">
@@ -101,6 +111,11 @@
                 <p class="text-lg font-medium">Select a device from the sidebar</p>
             </div>
 
+
+
+
+
+            <!-- view-dashboard -->
             <div id="view-dashboard" class="tab-content hidden animate-fade-in max-w-6xl mx-auto space-y-8">
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-red-500 relative overflow-hidden group">
@@ -245,18 +260,134 @@
                 </div>
             </div>
 
-            <div id="view-web" class="tab-content hidden animate-fade-in h-96 flex flex-col items-center justify-center text-center text-slate-400">
-                <i data-lucide="globe" width="48" class="mb-4 opacity-50"></i>
-                <h3 class="text-lg font-bold text-slate-600">Web Safety</h3>
+
+
+
+
+            <!------- view-web ---------->
+            <div id="view-web" class="tab-content hidden animate-fade-in max-w-7xl mx-auto pb-12">
+                
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    
+                    <div class="space-y-6">
+                        
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div class="p-4 border-b border-slate-100 flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+                                    <i data-lucide="shield" width="18"></i>
+                                </div>
+                                <h3 class="font-bold text-slate-700">Block Categories</h3>
+                            </div>
+                            <div class="p-4 space-y-4" id="category-list">
+                                <div class="flex items-center justify-center text-slate-400 py-4">
+                                    <i data-lucide="loader-2" class="animate-spin" width="20"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div class="p-4 border-b border-slate-100 flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center text-red-500">
+                                    <i data-lucide="alert-octagon" width="18"></i>
+                                </div>
+                                <h3 class="font-bold text-slate-700">Blocked URLs</h3>
+                            </div>
+                            
+                            <div class="p-4 max-h-60 overflow-y-auto custom-scrollbar space-y-2" id="url-list">
+                            </div>
+
+                            <div class="p-4 bg-slate-50 border-t border-slate-100 flex gap-2">
+                                <input type="text" id="new-url-input" placeholder="example.com" 
+                                    class="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none transition-colors">
+                                <button onclick="window.addBlockedUrl()" 
+                                        class="bg-slate-900 hover:bg-slate-800 text-white p-2 rounded-lg transition-colors flex items-center justify-center">
+                                    <i data-lucide="plus" width="18"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-2">
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden h-full flex flex-col">
+                            
+                            <div class="p-6 bg-purple-50/50 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                <div class="flex items-center gap-3">
+                                    <div class="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                                        <i data-lucide="globe" width="20"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="text-lg font-bold text-slate-800">Browser History</h3>
+                                        <p class="text-xs text-slate-500">Real-time monitoring & insights</p>
+                                    </div>
+                                </div>
+                                
+                                <button onclick="window.analyzeWebSafety()" id="ai-trigger-btn"
+                                        class="group flex items-center gap-2 bg-purple-100 hover:bg-purple-200 text-purple-700 px-4 py-2 rounded-xl transition-all font-bold text-sm border border-purple-200">
+                                    <i data-lucide="brain-circuit" width="18" class="group-hover:scale-110 transition-transform"></i>
+                                    <span id="ai-btn-text">Analyze Risks with AI</span>
+                                </button>
+                            </div>
+
+                            <div id="ai-insight-box" class="hidden m-6 p-5 bg-purple-50 border border-purple-100 rounded-xl relative">
+                                <div class="absolute top-0 left-0 w-1 h-full bg-purple-400 rounded-l-xl"></div>
+                                <div class="flex gap-3">
+                                    <i data-lucide="sparkles" class="text-purple-600 shrink-0 mt-0.5" width="18"></i>
+                                    <div class="space-y-1">
+                                        <h4 class="text-xs font-bold text-purple-400 uppercase tracking-wider">Gemini Insight</h4>
+                                        <p id="ai-result-text" class="text-sm text-purple-900 leading-relaxed font-medium">
+                                            </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex-1 p-6 overflow-hidden flex flex-col">
+                                <div class="border border-slate-200 rounded-xl overflow-hidden flex-1 flex flex-col">
+                                    <div class="bg-slate-50 border-b border-slate-200 px-4 py-2 grid grid-cols-12 gap-4 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                                        <div class="col-span-3">Timestamp</div>
+                                        <div class="col-span-7">Page Title / URL</div>
+                                        <div class="col-span-2 text-right">Risk Score</div>
+                                    </div>
+                                    <div class="overflow-y-auto flex-1 custom-scrollbar bg-white" id="history-rows">
+                                        </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                </div>
             </div>
+            <!-- ------------------ -->
+
+
+
+
+
+
+            <!-- view-location -->
             <div id="view-location" class="tab-content hidden animate-fade-in h-96 flex flex-col items-center justify-center text-center text-slate-400">
                 <i data-lucide="map" width="48" class="mb-4 opacity-50"></i>
                 <h3 class="text-lg font-bold text-slate-600">Full Map</h3>
             </div>
+            <!-- ----------------- -->
+
+
+
+
+
+
+            <!-- view-settings -->
             <div id="view-settings" class="tab-content hidden animate-fade-in h-96 flex flex-col items-center justify-center text-center text-slate-400">
                 <i data-lucide="settings" width="48" class="mb-4 opacity-50"></i>
                 <h3 class="text-lg font-bold text-slate-600">Settings</h3>
             </div>
+            <!-- ------------------- -->
+
+
+
+
+
+
 
         </div>
 

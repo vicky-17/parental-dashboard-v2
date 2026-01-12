@@ -61,10 +61,32 @@ const AppRuleSchema = new mongoose.Schema({
     usedToday: { type: Number, default: 0 } 
 });
 
+
+// Web Filter & History Schema
+const WebFilterSchema = new mongoose.Schema({
+    deviceId: { type: String, required: true, unique: true },
+    blockedCategories: { type: [String], default: [] },
+    blockedUrls: { type: [String], default: [] },
+    history: [{
+        url: String,
+        title: String,
+        timestamp: { type: Date, default: Date.now },
+        riskScore: { type: Number, default: 0 } // 0-100
+    }]
+});
+
+
+
 const User = mongoose.model('User', UserSchema);
 const Device = mongoose.model('Device', DeviceSchema);
 const Location = mongoose.model('Location', LocationSchema);
 const AppRule = mongoose.model('AppRule', AppRuleSchema);
+const WebFilter = mongoose.model('WebFilter', WebFilterSchema);
+
+
+
+
+
 
 // --- Auth Middleware ---
 const authenticateToken = (req, res, next) => {
@@ -230,6 +252,107 @@ app.post('/api/rules/update', authenticateToken, async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+
+
+
+// --- NEW API ROUTES FOR WEB SAFETY ---
+
+// 1. Get Web Config & History
+app.get('/api/web/:deviceId', authenticateToken, async (req, res) => {
+    try {
+        let filter = await WebFilter.findOne({ deviceId: req.params.deviceId });
+        
+        // Create default if not exists (Mocking history for demo)
+        if (!filter) {
+            filter = new WebFilter({
+                deviceId: req.params.deviceId,
+                blockedCategories: ['pornography', 'gambling'],
+                blockedUrls: ['gambling-site.com'],
+                history: [
+                    { title: "Math Homework Help", url: "https://khanacademy.org/math", riskScore: 5, timestamp: new Date(Date.now() - 1000 * 60 * 5) },
+                    { title: "Free Game Mods", url: "https://unknown-mods.net/download", riskScore: 85, timestamp: new Date(Date.now() - 1000 * 60 * 30) },
+                    { title: "Social Media Login", url: "https://facebook.com", riskScore: 45, timestamp: new Date(Date.now() - 1000 * 60 * 120) },
+                    { title: "Wikipedia - History", url: "https://wikipedia.org/wiki/WWII", riskScore: 10, timestamp: new Date(Date.now() - 1000 * 60 * 180) }
+                ]
+            });
+            await filter.save();
+        }
+        res.json(filter);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 2. Update Configuration (Categories & URLs)
+app.post('/api/web/update', authenticateToken, async (req, res) => {
+    try {
+        const { deviceId, blockedCategories, blockedUrls } = req.body;
+        const updateFields = {};
+        if (blockedCategories) updateFields.blockedCategories = blockedCategories;
+        if (blockedUrls) updateFields.blockedUrls = blockedUrls;
+
+        await WebFilter.findOneAndUpdate(
+            { deviceId },
+            { $set: updateFields },
+            { upsert: true, new: true }
+        );
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 3. AI Analysis Endpoint
+app.post('/api/web/analyze', authenticateToken, async (req, res) => {
+    try {
+        const { history, blockedCategories } = req.body;
+        
+        // Prepare prompt for Gemini
+        const historyText = history.map(h => `- [${h.riskScore}/100] ${h.title} (${h.url})`).join('\n');
+        const prompt = `
+            Act as a parental safety expert. 
+            Blocked Categories: ${blockedCategories.join(', ')}.
+            
+            Analyze this browsing history for risks:
+            ${historyText}
+            
+            Identify patterns, flag suspicious URLs that aren't blocked yet, and summarize the child's online behavior in 2-3 sentences. 
+            Focus on safety.
+        `;
+
+        // Call Gemini API (Using fetch)
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`;
+        
+        const response = await fetch(geminiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }]
+            })
+        });
+
+        const data = await response.json();
+        
+        if (data.candidates && data.candidates[0].content) {
+            res.json({ analysis: data.candidates[0].content.parts[0].text });
+        } else {
+            res.json({ analysis: "Could not generate analysis at this time." });
+        }
+    } catch (error) {
+        console.error("Gemini Error:", error);
+        res.status(500).json({ error: "AI Analysis Failed" });
+    }
+});
+
+
+
+
+
+
+
+
+
 
 // Serve Frontend
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
