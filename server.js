@@ -374,7 +374,6 @@ app.post('/api/web/analyze', authenticateToken, async (req, res) => {
 
 
 
-
 // --- NEW API ROUTES FOR ZONES ---
 
 // 1. Get Zones for Device
