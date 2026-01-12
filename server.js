@@ -75,6 +75,21 @@ const WebFilterSchema = new mongoose.Schema({
     }]
 });
 
+// --- NEW SCHEMA: ZONES ---
+const ZoneSchema = new mongoose.Schema({
+    deviceId: String,
+    name: String,
+    type: { type: String, enum: ['safe', 'danger'], default: 'safe' },
+    alertMessage: String,
+    // GeoJSON Polygon
+    points: [{
+        lat: Number,
+        lng: Number
+    }],
+    createdAt: { type: Date, default: Date.now }
+});
+
+
 
 
 const User = mongoose.model('User', UserSchema);
@@ -82,7 +97,7 @@ const Device = mongoose.model('Device', DeviceSchema);
 const Location = mongoose.model('Location', LocationSchema);
 const AppRule = mongoose.model('AppRule', AppRuleSchema);
 const WebFilter = mongoose.model('WebFilter', WebFilterSchema);
-
+const Zone = mongoose.model('Zone', ZoneSchema);
 
 
 
@@ -350,6 +365,62 @@ app.post('/api/web/analyze', authenticateToken, async (req, res) => {
         res.status(500).json({ error: "AI Analysis Failed" });
     }
 });
+
+
+
+
+
+
+
+
+
+
+// --- NEW API ROUTES FOR ZONES ---
+
+// 1. Get Zones for Device
+app.get('/api/zones/:deviceId', authenticateToken, async (req, res) => {
+    try {
+        const zones = await Zone.find({ deviceId: req.params.deviceId }).sort({ createdAt: -1 });
+        res.json(zones);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 2. Create New Zone
+app.post('/api/zones/add', authenticateToken, async (req, res) => {
+    try {
+        const { deviceId, name, type, alertMessage, points } = req.body;
+        
+        // Validation (Basic)
+        if (!deviceId || !name || !points || points.length < 3) {
+            return res.status(400).json({ error: "Invalid zone data" });
+        }
+
+        const newZone = new Zone({ deviceId, name, type, alertMessage, points });
+        await newZone.save();
+        res.json({ success: true, zone: newZone });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 3. Delete Zone
+app.delete('/api/zones/:zoneId', authenticateToken, async (req, res) => {
+    try {
+        await Zone.findByIdAndDelete(req.params.zoneId);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+
+
+
+
+
+
 
 
 
