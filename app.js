@@ -13,7 +13,6 @@ let liveMarker = null;
 
 
 
-
 // --- INIT ---
 document.addEventListener('DOMContentLoaded', () => {
     if (window.lucide) window.lucide.createIcons();
@@ -207,12 +206,33 @@ function switchTab(tabId) {
     };
     document.getElementById('page-title').textContent = titles[tabId] || 'Dashboard';
 
+    // 1. Dashboard Map Refresh
     if (tabId === 'dashboard' && liveMap) {
         setTimeout(() => {
             liveMap.invalidateSize();
             if (liveMarker) {
                 liveMap.setView(liveMarker.getLatLng(), liveMap.getZoom());
             }
+        }, 200);
+    }
+
+    // [NEW] 2. Geofencing Map Initialization
+    if (tabId === 'location') {
+        setTimeout(() => {
+            // Initialize map if it doesn't exist yet
+            if (!geofenceMap) {
+                initGeofenceMap();
+            } else {
+                geofenceMap.invalidateSize(); // Fixes partial rendering
+            }
+
+            // Auto-zoom to child's last known location
+            if (lastKnownLocation && geofenceMap) {
+                geofenceMap.setView([lastKnownLocation.lat, lastKnownLocation.lng], 15);
+            }
+            
+            // Ensure zones are drawn
+            renderZonesOnMap();
         }, 200);
     }
 }
@@ -223,6 +243,9 @@ async function loadLocation(hardwareId) {
         const loc = await res.json();
         
         if (loc && loc.latitude) {
+            // [NEW] Save for Geofencing use
+            lastKnownLocation = { lat: loc.latitude, lng: loc.longitude };
+
             if (liveMap) {
                 const pos = [loc.latitude, loc.longitude];
                 if (!liveMarker) {
@@ -232,7 +255,7 @@ async function loadLocation(hardwareId) {
                     liveMarker.setLatLng(pos);
                 }
             }
-
+            // ... (Rest of your UI update code: battery, speed, etc.) ...
             const timeStr = new Date(loc.timestamp).toLocaleTimeString();
             document.getElementById('last-synced-time').textContent = timeStr;
             document.getElementById('dash-last-ping').textContent = "Ping: " + timeStr;
@@ -755,29 +778,41 @@ async function loadZones(hardwareId) {
 
 // 2. Initialize/Render Map
 function initGeofenceMap() {
+    // Only create if it doesn't exist
     if (!geofenceMap && document.getElementById('geofenceMap')) {
-        // Default center (India)
         geofenceMap = L.map('geofenceMap').setView([20.5937, 78.9629], 5);
         
-        // Add OpenStreetMap Tiles
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors',
             maxZoom: 19
         }).addTo(geofenceMap);
 
-        // Click Handler for Drawing
         geofenceMap.on('click', (e) => {
             if (isDrawing) {
                 addDrawingPoint(e.latlng);
             }
         });
     }
-    
-    // Invalidate size to ensure map renders correctly when tab switches
-    setTimeout(() => {
-        if(geofenceMap) geofenceMap.invalidateSize();
-    }, 200);
 }
+
+
+// [NEW] Zoom to specific zone when clicked in the list
+window.focusOnZone = (id) => {
+    // 1. Find the zone data
+    const zone = currentZones.find(z => z._id === id);
+    if (!zone || !geofenceMap || !zone.points || zone.points.length === 0) return;
+
+    // 2. Create a temporary polygon to calculate bounds
+    const polygon = L.polygon(zone.points);
+    
+    // 3. Fly to that area
+    geofenceMap.flyToBounds(polygon.getBounds(), { padding: [50, 50], duration: 1.5 });
+    
+    // 4. Open its popup if we found the layer
+    const layer = zoneLayers.find(l => l.zoneId === id);
+    if(layer) layer.openPopup();
+};
+
 
 // 3. Render Zones Visuals on Map
 function renderZonesOnMap() {
@@ -790,7 +825,7 @@ function renderZonesOnMap() {
     currentZones.forEach(zone => {
         if (!zone.points || zone.points.length < 3) return;
 
-        const color = zone.type === 'safe' ? '#22c55e' : '#ef4444'; // Green vs Red
+        const color = zone.type === 'safe' ? '#22c55e' : '#ef4444'; 
         const polygon = L.polygon(zone.points, {
             color: color,
             fillColor: color,
@@ -799,6 +834,9 @@ function renderZonesOnMap() {
         }).addTo(geofenceMap);
         
         polygon.bindPopup(`<b>${zone.name}</b><br>${zone.type === 'safe' ? 'Safe Zone' : 'Danger Zone'}`);
+        
+        // Tag layer with ID for lookup later
+        polygon.zoneId = zone._id; 
         zoneLayers.push(polygon);
     });
 }
@@ -807,15 +845,18 @@ function renderZonesOnMap() {
 window.startDrawingZone = () => {
     if(!geofenceMap) initGeofenceMap();
     
+    // If we have a location, ensure we are looking at it before drawing
+    if (lastKnownLocation) {
+        geofenceMap.setView([lastKnownLocation.lat, lastKnownLocation.lng], 16);
+    }
+
     isDrawing = true;
     drawnPoints = [];
     
-    // UI Updates
     document.getElementById('geofenceMap').classList.add('drawing-cursor');
     document.getElementById('map-controls').classList.remove('hidden');
     document.getElementById('drawing-instructions').classList.remove('hidden');
     
-    // Create temporary layer for drawing
     if (drawingLayer) geofenceMap.removeLayer(drawingLayer);
     drawingLayer = L.layerGroup().addTo(geofenceMap);
 };
