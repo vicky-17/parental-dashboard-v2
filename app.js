@@ -916,19 +916,30 @@ function renderZoneList() {
         const isSafe = zone.type === 'safe';
         return `
             <div onclick="window.focusOnZone('${zone._id}')"
-            class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 cursor-pointer hover:border-indigo-300">
+            class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 cursor-pointer transition-all hover:border-indigo-400 hover:shadow-md group relative">
+                
                 <div class="flex justify-between items-start">
                     <div>
-                        <h4 class="font-bold text-slate-800">${zone.name}</h4>
-                        <span class="text-[10px] font-bold uppercase ${isSafe ? 'text-green-600 bg-green-100' : 'text-red-600 bg-red-100'} px-2 py-0.5 rounded-full">
+                        <h4 class="font-bold text-slate-800 text-sm">${zone.name}</h4>
+                        <span class="text-[10px] font-bold uppercase mt-1 inline-block ${isSafe ? 'text-green-600 bg-green-100' : 'text-red-600 bg-red-100'} px-2 py-0.5 rounded-full">
                             ${isSafe ? 'Safe Zone' : 'Danger Zone'}
                         </span>
                     </div>
-                    <button onclick="window.deleteZone('${zone._id}')" class="text-slate-300 hover:text-red-500"><i data-lucide="trash-2" width="16"></i></button>
+                    <button onclick="event.stopPropagation(); window.deleteZone('${zone._id}')" class="text-slate-300 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-colors">
+                        <i data-lucide="trash-2" width="16"></i>
+                    </button>
+                </div>
+
+                <div class="mt-3 bg-slate-50 p-2 rounded-lg border border-slate-100 flex items-start gap-2">
+                    <i data-lucide="bell-ring" class="text-slate-400 shrink-0 mt-0.5" width="12"></i>
+                    <p class="text-xs text-slate-500 leading-snug">
+                        <span class="font-semibold text-slate-600">Alert:</span> "${zone.alertMessage || 'No message set'}"
+                    </p>
                 </div>
             </div>
         `;
     }).join('');
+    
     if (window.lucide) window.lucide.createIcons();
 }
 
