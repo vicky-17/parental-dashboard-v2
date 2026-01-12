@@ -155,7 +155,8 @@ async function selectDevice(device) {
         loadLocation(device.deviceId), 
         loadApps(device.deviceId),
         loadWebData(device.deviceId),
-        loadZones(device.deviceId)
+        loadZones(device.deviceId),
+        loadSettings(device.deviceId)
     ]);
 
     if (!liveMap && document.getElementById('liveMap')) {
@@ -1011,8 +1012,116 @@ window.focusOnZone = (id) => {
 
 
 
+// ... [Existing Code] ...
 
+// --- SETTINGS LOGIC ---
 
+let deviceSettings = {
+    bedtimeWeeknight: "21:00",
+    bedtimeWeekend: "23:00",
+    uninstallProtection: false,
+    locationTracking: true
+};
+
+// 1. Fetch Settings
+async function loadSettings(hardwareId) {
+    try {
+        const res = await authenticatedFetch(`/settings/${hardwareId}`);
+        deviceSettings = await res.json();
+        renderSettingsUI();
+    } catch(e) {
+        console.error("Settings fetch error", e);
+    }
+}
+
+// 2. Render UI (Populate Form)
+function renderSettingsUI() {
+    // Inputs
+    const weekInput = document.getElementById('set-bed-week');
+    const weekendInput = document.getElementById('set-bed-weekend');
+    
+    if (weekInput) weekInput.value = deviceSettings.bedtimeWeeknight || "21:00";
+    if (weekendInput) weekendInput.value = deviceSettings.bedtimeWeekend || "23:00";
+
+    // Toggles
+    updateToggleVisuals('uninstallProtection', deviceSettings.uninstallProtection);
+    updateToggleVisuals('locationTracking', deviceSettings.locationTracking);
+}
+
+// Helper for Toggles
+function updateToggleVisuals(key, isActive) {
+    const btn = document.getElementById(`btn-${key}`);
+    const knob = document.getElementById(`knob-${key}`);
+    
+    if (!btn || !knob) return;
+
+    if (isActive) {
+        btn.classList.remove('bg-slate-300');
+        btn.classList.add('bg-green-500');
+        knob.classList.remove('translate-x-0');
+        knob.classList.add('translate-x-6');
+    } else {
+        btn.classList.add('bg-slate-300');
+        btn.classList.remove('bg-green-500');
+        knob.classList.add('translate-x-0');
+        knob.classList.remove('translate-x-6');
+    }
+}
+
+// 3. User Actions
+window.toggleSettingSwitch = (key) => {
+    // Update State
+    deviceSettings[key] = !deviceSettings[key];
+    // Update Visuals
+    updateToggleVisuals(key, deviceSettings[key]);
+};
+
+window.saveDeviceSettings = async () => {
+    if (!currentDevice) return;
+
+    // Read Input Values
+    deviceSettings.bedtimeWeeknight = document.getElementById('set-bed-week').value;
+    deviceSettings.bedtimeWeekend = document.getElementById('set-bed-weekend').value;
+
+    const btn = document.getElementById('save-settings-btn');
+    const originalContent = btn.innerHTML;
+    
+    // Loading State
+    btn.disabled = true;
+    btn.innerHTML = `<i data-lucide="loader-2" class="animate-spin" width="18"></i> <span>Saving...</span>`;
+    if(window.lucide) window.lucide.createIcons();
+
+    try {
+        await authenticatedFetch('/settings/update', {
+            method: 'POST',
+            body: JSON.stringify({
+                deviceId: currentDevice.deviceId,
+                ...deviceSettings
+            })
+        });
+
+        // Success State
+        btn.innerHTML = `<i data-lucide="check" width="18"></i> <span>Saved!</span>`;
+        if(window.lucide) window.lucide.createIcons();
+        btn.classList.remove('bg-slate-900', 'hover:bg-slate-800');
+        btn.classList.add('bg-green-600', 'hover:bg-green-700');
+
+        setTimeout(() => {
+            btn.innerHTML = originalContent;
+            btn.classList.add('bg-slate-900', 'hover:bg-slate-800');
+            btn.classList.remove('bg-green-600', 'hover:bg-green-700');
+            btn.disabled = false;
+            if(window.lucide) window.lucide.createIcons();
+        }, 2000);
+
+    } catch (e) {
+        alert("Failed to save settings.");
+        btn.innerHTML = originalContent;
+        btn.disabled = false;
+    }
+};
+
+// --------------------------------------------------------------------
 
 
 

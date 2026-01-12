@@ -510,7 +510,56 @@ app.get('/api/alerts/:deviceId', authenticateToken, async (req, res) => {
 
 
 
+// ... [Existing Imports & Schemas] ...
 
+// --- NEW SCHEMA: SETTINGS ---
+const SettingsSchema = new mongoose.Schema({
+    deviceId: { type: String, required: true, unique: true },
+    bedtimeWeeknight: { type: String, default: "21:00" },
+    bedtimeWeekend: { type: String, default: "23:00" },
+    uninstallProtection: { type: Boolean, default: false },
+    locationTracking: { type: Boolean, default: true }
+});
+
+const Settings = mongoose.model('Settings', SettingsSchema);
+
+// ... [Existing Middleware & DB Connection] ...
+
+// --- NEW API ROUTES FOR SETTINGS ---
+
+// 1. Get Settings
+app.get('/api/settings/:deviceId', authenticateToken, async (req, res) => {
+    try {
+        let settings = await Settings.findOne({ deviceId: req.params.deviceId });
+        
+        // Create default if not exists
+        if (!settings) {
+            settings = new Settings({ deviceId: req.params.deviceId });
+            await settings.save();
+        }
+        res.json(settings);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 2. Update Settings
+app.post('/api/settings/update', authenticateToken, async (req, res) => {
+    try {
+        const { deviceId, bedtimeWeeknight, bedtimeWeekend, uninstallProtection, locationTracking } = req.body;
+        
+        const settings = await Settings.findOneAndUpdate(
+            { deviceId },
+            { $set: { bedtimeWeeknight, bedtimeWeekend, uninstallProtection, locationTracking } },
+            { new: true, upsert: true }
+        );
+        res.json({ success: true, settings });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ... [Rest of Server Code] ...
 
 
 
