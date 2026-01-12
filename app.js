@@ -11,6 +11,9 @@ let modifiedApps = new Set(); // Tracks indices of modified apps
 let liveMap = null;
 let liveMarker = null;
 
+
+
+
 // --- INIT ---
 document.addEventListener('DOMContentLoaded', () => {
     if (window.lucide) window.lucide.createIcons();
@@ -725,7 +728,6 @@ window.analyzeWebSafety = async () => {
 
 
 
-// ... [Existing Setup Code: API_URL, selectDevice, etc] ...
 
 // --- GEOFENCING LOGIC ---
 
@@ -735,6 +737,9 @@ let drawingLayer = null; // LayerGroup for drawing points/lines
 let drawnPoints = []; // Array of {lat, lng}
 let isDrawing = false;
 let zoneLayers = []; // Store references to rendered polygons to remove them easily
+let lastKnownLocation = null;
+
+
 
 // 1. Fetch Zones
 async function loadZones(hardwareId) {
@@ -910,7 +915,8 @@ function renderZoneList() {
     container.innerHTML = currentZones.map(zone => {
         const isSafe = zone.type === 'safe';
         return `
-            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 cursor-pointer hover:border-indigo-300">
+            <div onclick="window.focusOnZone('${zone._id}')"
+            class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 cursor-pointer hover:border-indigo-300">
                 <div class="flex justify-between items-start">
                     <div>
                         <h4 class="font-bold text-slate-800">${zone.name}</h4>
@@ -925,6 +931,23 @@ function renderZoneList() {
     }).join('');
     if (window.lucide) window.lucide.createIcons();
 }
+
+
+
+
+
+window.focusOnZone = (id) => {
+    // 1. Find the zone data
+    const zone = currentZones.find(z => z._id === id);
+    if (!zone || !geofenceMap || !zone.points || zone.points.length === 0) return;
+
+    // 2. Create a temporary polygon to get the boundaries
+    const polygon = L.polygon(zone.points);
+    
+    // 3. Zoom the map to fit that polygon exactly
+    geofenceMap.fitBounds(polygon.getBounds(), { padding: [50, 50] });
+};
+
 
 // ------------------------------------------------------------------------------------------
 
