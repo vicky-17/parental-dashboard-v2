@@ -15,6 +15,78 @@ let liveMarker = null;
 
 // --- INIT ---
 document.addEventListener('DOMContentLoaded', () => {
+    // --- INSERT THIS SECTION START ---
+    
+    const authForm = document.getElementById('auth-form');
+    
+    // Only run this logic if we are on the login page (index.html)
+    if (authForm) {
+        const toggleBtn = document.getElementById('toggle-auth');
+        const submitBtn = document.getElementById('submit-btn');
+        const toggleText = document.getElementById('toggle-text');
+        const errorMsg = document.getElementById('error-message');
+        let isLogin = true; // Tracks if user is trying to Login or Register
+
+        // 1. Handle Toggle (Switch between Login and Signup)
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                isLogin = !isLogin; // Flip the state
+                
+                // Update UI Text
+                submitBtn.textContent = isLogin ? 'Sign In' : 'Create Account';
+                toggleText.textContent = isLogin ? "Don't have an account?" : "Already have an account?";
+                toggleBtn.textContent = isLogin ? 'Sign up' : 'Log in';
+                errorMsg.classList.add('hidden'); // Clear errors
+            });
+        }
+
+        // 2. Handle Form Submission (Send data to Server)
+        authForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            // Basic Validation
+            if (!email || !password) {
+                errorMsg.textContent = "Please enter both email and password.";
+                errorMsg.classList.remove('hidden');
+                return;
+            }
+
+            try {
+                // Determine which endpoint to hit based on isLogin state
+                const endpoint = isLogin ? '/auth/login' : '/auth/register';
+                
+                const res = await fetch(`${API_URL}${endpoint}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) throw new Error(data.message || 'Action failed');
+
+                if (isLogin) {
+                    // Login Success: Save token & Redirect
+                    localStorage.setItem('token', data.token);
+                    window.location.href = 'dashboard.html'; // Or '/dashboard' depending on your server routes
+                } else {
+                    // Register Success: Switch back to login view
+                    alert("Account created! Please sign in.");
+                    toggleBtn.click(); // Programmatically switch to login view
+                }
+
+            } catch (err) {
+                errorMsg.textContent = err.message;
+                errorMsg.classList.remove('hidden');
+            }
+        });
+    }
+
+
+
     if (window.lucide) window.lucide.createIcons();
     
     const token = localStorage.getItem('token');
