@@ -2,7 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
+// const bcrypt = require('bcryptjs');
 const path = require('path');
 
 const app = express();
@@ -121,10 +121,10 @@ const authenticateToken = (req, res, next) => {
 // 1. Auth
 app.post('/api/auth/register', async (req, res) => {
     try {
-        const hashedPassword = await bcrypt.hash(req.body.password, 10);
-        const user = new User({ email: req.body.email, password: hashedPassword });
+        const user = new User({ email: req.body.email, password: req.body.password });
         await user.save();
         res.status(201).send({ message: 'User created' });
+
     } catch (error) {
         res.status(500).send(error.message);
     }
@@ -134,7 +134,8 @@ app.post('/api/auth/login', async (req, res) => {
     const user = await User.findOne({ email: req.body.email });
     if (!user) return res.status(400).send('Cannot find user');
     try {
-        if (await bcrypt.compare(req.body.password, user.password)) {
+        // Compare plain text strings
+        if (req.body.password === user.password) {
             const token = jwt.sign({ userId: user._id }, JWT_SECRET);
             res.json({ token, email: user.email });
         } else {
