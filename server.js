@@ -329,23 +329,25 @@ app.post('/api/apps', async (req, res) => {
         
         if (apps && Array.isArray(apps)) {
             for (const app of apps) {
+                // OVERWRITE logic: Always $set the current today usage
                 await AppRule.findOneAndUpdate(
                     { deviceId, packageName: app.packageName },
                     { 
                         $set: { 
                             appName: app.appName, 
-                            usedToday: app.minutes || 0,
+                            usedToday: app.minutes || 0, // OVERWRITES current database value
                             category: app.category || 'General' 
                         },
+                        // Only set these defaults if the record is brand new
                         $setOnInsert: { isGlobalLocked: false, timeLimit: 0 }
                     },
-                    { upsert: true, new: true }
+                    { upsert: true }
                 );
             }
         }
         res.json({ success: true });
     } catch (error) {
-        console.error(error);
+        console.error("Error updating app usage:", error);
         res.status(500).json({ error: error.message });
     }
 });
