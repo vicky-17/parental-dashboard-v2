@@ -4,10 +4,24 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 // const bcrypt = require('bcryptjs');
 const path = require('path');
+const http = require('http');
+const { Server } = require('socket.io');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
+
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = 'your_super_secret_key_123'; 
+
+// 🔐 In-Memory Pending Pairings Store
+// Structure: { 'code': { userId, socketId, timestamp, timeoutId } }
+const pendingPairings = {}; 
 
 // Middleware
 app.use(cors());
@@ -156,34 +170,142 @@ app.get('/api/devices', authenticateToken, async (req, res) => {
     }
 });
 
+// Delete Device
+app.delete('/api/devices/:deviceId', authenticateToken, async (req, res) => {
+    try {
+        const { deviceId } = req.params;
+        
+        // Find and delete device
+        const device = await Device.findOne({ 
+            _id: deviceId, 
+            userId: req.user.userId 
+        });
+
+        if (!device) {
+            return res.status(404).json({ error: 'Device not found' });
+        }
+
+        // Delete associated data
+        await Location.deleteMany({ deviceId: device.deviceId });
+        await AppRule.deleteMany({ deviceId: device.deviceId });
+        await WebFilter.deleteOne({ deviceId: device.deviceId });
+        await Zone.deleteMany({ deviceId: device.deviceId });
+        
+        // Delete device itself
+        await Device.deleteOne({ _id: deviceId });
+
+        console.log(`🗑️ Deleted device: ${device.name} (${deviceId})`);
+        res.json({ success: true, message: 'Device deleted successfully' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Cancel Pairing (Dashboard cancels before Android connects)
+app.post('/api/devices/cancel-pairing', authenticateToken, async (req, res) => {
+    try {
+        const { code } = req.body;
+        
+        if (pendingPairings[code]) {
+            // Clear timeout
+            if (pendingPairings[code].timeoutId) {
+                clearTimeout(pendingPairings[code].timeoutId);
+            }
+            
+            delete pendingPairings[code];
+            console.log(`❌ Pairing cancelled for code: ${code}`);
+            res.json({ success: true });
+        } else {
+            res.status(404).json({ error: 'Pairing code not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.post('/api/devices/add', authenticateToken, async (req, res) => {
     try {
-        const code = Math.floor(100000 + Math.random() * 900000).toString();
-        const device = new Device({
+        // Generate unique 6-digit code
+        let code;
+        do {
+            code = Math.floor(100000 + Math.random() * 900000).toString();
+        } while (pendingPairings[code]); // Ensure uniqueness
+
+        // Store in pending state (not in database yet)
+        pendingPairings[code] = {
             userId: req.user.userId,
-            pairingCode: code,
-            name: 'Pending Device',
-            isPaired: false
-        });
-        await device.save();
+            socketId: null, // Will be set when socket connects
+            timestamp: Date.now()
+        };
+
+        // Set 2-minute timeout
+        const timeoutId = setTimeout(() => {
+            if (pendingPairings[code]) {
+                const socketId = pendingPairings[code].socketId;
+                
+                // Notify dashboard about timeout
+                if (socketId && io.sockets.sockets.get(socketId)) {
+                    io.to(socketId).emit('pairing_timeout', { code });
+                }
+                
+                delete pendingPairings[code];
+                console.log(`⏰ Pairing code ${code} expired`);
+            }
+        }, 2 * 60 * 1000); // 2 minutes
+
+        pendingPairings[code].timeoutId = timeoutId;
+
+        console.log(`🔑 Generated pairing code: ${code} for user ${req.user.userId}`);
         res.json({ code });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-// 3. Pairing (Child Side)
+// 3. Pairing (Child Side) - Android Confirmation
 app.post('/api/devices/pair', async (req, res) => {
     try {
         const { code, deviceId, deviceName } = req.body; 
-        const device = await Device.findOne({ pairingCode: code, isPaired: false });
-        if (!device) return res.status(404).json({ success: false, message: 'Invalid Code' });
+        
+        // Check if code exists in pending pairings
+        if (!pendingPairings[code]) {
+            return res.status(404).json({ success: false, message: 'Invalid or expired code' });
+        }
 
-        device.deviceId = deviceId;
-        device.name = deviceName || "Child Device";
-        device.isPaired = true;
+        const pendingPairing = pendingPairings[code];
+
+        // Clear timeout
+        if (pendingPairing.timeoutId) {
+            clearTimeout(pendingPairing.timeoutId);
+        }
+
+        // Create device in database
+        const device = new Device({
+            userId: pendingPairing.userId,
+            deviceId: deviceId,
+            name: deviceName || "Child Device",
+            pairingCode: code,
+            isPaired: true
+        });
         await device.save();
-        res.json({ success: true });
+
+        // Notify dashboard via socket
+        if (pendingPairing.socketId && io.sockets.sockets.get(pendingPairing.socketId)) {
+            io.to(pendingPairing.socketId).emit('pairing_success', { 
+                device: {
+                    id: device._id,
+                    name: device.name,
+                    deviceId: device.deviceId,
+                    isPaired: true
+                }
+            });
+        }
+
+        // Remove from pending
+        delete pendingPairings[code];
+
+        console.log(`✅ Device paired successfully: ${deviceName} (${deviceId})`);
+        res.json({ success: true, deviceId: device._id });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -570,4 +692,60 @@ app.post('/api/settings/update', authenticateToken, async (req, res) => {
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'dashboard.html')));
 
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+// ============================================
+// 🔌 WEBSOCKET HANDLERS
+// ============================================
+
+io.on('connection', (socket) => {
+    console.log(`🔌 Client connected: ${socket.id}`);
+
+    // Dashboard registers for pairing updates
+    socket.on('register_pairing', (data) => {
+        const { code } = data;
+        
+        if (pendingPairings[code]) {
+            pendingPairings[code].socketId = socket.id;
+            console.log(`📱 Dashboard registered for pairing code: ${code}`);
+        }
+    });
+
+    // Delete device via socket
+    socket.on('delete_device', async (data) => {
+        try {
+            const { deviceId, token } = data;
+            
+            // Verify token
+            const decoded = jwt.verify(token, JWT_SECRET);
+            
+            const device = await Device.findOne({ 
+                _id: deviceId, 
+                userId: decoded.userId 
+            });
+
+            if (!device) {
+                socket.emit('delete_error', { error: 'Device not found' });
+                return;
+            }
+
+            // Delete associated data
+            await Location.deleteMany({ deviceId: device.deviceId });
+            await AppRule.deleteMany({ deviceId: device.deviceId });
+            await WebFilter.deleteOne({ deviceId: device.deviceId });
+            await Zone.deleteMany({ deviceId: device.deviceId });
+            
+            // Delete device
+            await Device.deleteOne({ _id: deviceId });
+
+            socket.emit('delete_success', { deviceId });
+            console.log(`🗑️ Device deleted via socket: ${device.name}`);
+        } catch (error) {
+            socket.emit('delete_error', { error: error.message });
+        }
+    });
+
+    socket.on('disconnect', () => {
+        console.log(`🔌 Client disconnected: ${socket.id}`);
+    });
+});
+
+server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
