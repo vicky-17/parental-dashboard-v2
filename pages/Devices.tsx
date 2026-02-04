@@ -219,7 +219,7 @@ const Devices: React.FC = () => {
 
       {/* Pairing Modal */}
       {pairingCode && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             {pairingStatus === 'waiting' && (
               <>
@@ -299,7 +299,7 @@ const Devices: React.FC = () => {
 
       {/* Delete Confirmation Modal */}
       {deviceToDelete && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             <div className="text-center mb-6">
               <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -368,9 +368,11 @@ const Devices: React.FC = () => {
                   >
                     <RefreshCw size={18} />
                   </button>
+                  
+                  {/* START: DELETE BUTTON CODE */}
                   <button
                     onClick={(e) => {
-                      e.stopPropagation();
+                      e.stopPropagation(); // Prevents clicking the card background
                       handleDeleteDevice(device);
                     }}
                     className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -378,6 +380,7 @@ const Devices: React.FC = () => {
                   >
                     <Trash2 size={18} />
                   </button>
+                  {/* END: DELETE BUTTON CODE */}
                 </div>
               </div>
               
