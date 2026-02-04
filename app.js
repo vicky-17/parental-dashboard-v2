@@ -11,6 +11,7 @@ let modifiedApps = new Set(); // Tracks indices of modified apps
 let liveMap = null;
 let liveMarker = null;
 
+let currentSortMode = 'usage';
 
 
 // --- INIT ---
@@ -353,12 +354,64 @@ function getAppColor(name) {
     return 'bg-indigo-600';
 }
 
+
+
+
+
+
+
+// --- SORTING LOGIC ---
+
+function applyAppSort() {
+    if (!currentApps) return;
+
+    currentApps.sort((a, b) => {
+        const nameA = (a.appName || a.packageName || "").toLowerCase();
+        const nameB = (b.appName || b.packageName || "").toLowerCase();
+
+        switch (currentSortMode) {
+            case 'usage':
+                // Higher usage first (descending)
+                return (b.usedToday || 0) - (a.usedToday || 0);
+            
+            case 'alpha':
+                // A-Z (ascending)
+                return nameA.localeCompare(nameB);
+            
+            case 'locked':
+                // Locked (true) comes before Unlocked (false)
+                return (b.isGlobalLocked === true ? 1 : 0) - (a.isGlobalLocked === true ? 1 : 0);
+
+            case 'unlocked':
+                // Unlocked (false) comes before Locked (true)
+                return (a.isGlobalLocked === true ? 1 : 0) - (b.isGlobalLocked === true ? 1 : 0);
+                
+            default:
+                return 0;
+        }
+    });
+}
+
+window.handleSortChange = (mode) => {
+    currentSortMode = mode;
+    applyAppSort();
+    renderAppGrid(); // Re-render the grid with new order
+};
+
+
+
+
+
+
+
+
 async function loadApps(hardwareId) {
     try {
         const res = await authenticatedFetch(`/data/${hardwareId}/apps`);
         currentApps = await res.json(); 
         modifiedApps.clear(); // Clear unsaved changes on refresh
         toggleSaveButton();
+        applyAppSort();
         renderAppGrid();
         updateDashboardUsageStats();
     } catch(e) { 
