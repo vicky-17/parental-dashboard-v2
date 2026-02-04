@@ -19,12 +19,12 @@ const Login: React.FC = () => {
     try {
       if (isLogin) {
         await authService.login(email, password);
-        navigate('/devices');
+        navigate('/home');
       } else {
         await authService.register(email, password);
         // After register, auto-login or prompt user
         await authService.login(email, password);
-        navigate('/devices');
+        navigate('/home');
       }
     } catch (err: any) {
       setError(err.message || 'Authentication failed');

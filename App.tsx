@@ -2,6 +2,7 @@ import React from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import Home from './pages/Home';
 import Devices from './pages/Devices';
 import Dashboard from './pages/Dashboard';
 import { getAuthToken } from './services/api';
@@ -25,6 +26,14 @@ const App: React.FC = () => {
       <Layout>
         <Routes>
           <Route path="/" element={<Login />} />
+          <Route 
+            path="/home" 
+            element={
+              <ProtectedRoute>
+                <Home />
+              </ProtectedRoute>
+            } 
+          />
           <Route 
             path="/devices" 
             element={

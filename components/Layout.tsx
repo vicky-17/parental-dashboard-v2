@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, ShieldCheck, Smartphone } from 'lucide-react';
+import { LogOut, ShieldCheck, Smartphone, Home } from 'lucide-react';
 import { removeAuthToken } from '../services/api';
 
 interface LayoutProps {
@@ -28,7 +28,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <div className="flex justify-between items-center h-16">
             <div 
               className="flex items-center gap-2 cursor-pointer" 
-              onClick={() => navigate('/devices')}
+              onClick={() => navigate('/home')}
             >
               <div className="bg-primary-600 p-2 rounded-lg text-white">
                 <ShieldCheck size={24} />
@@ -38,11 +38,20 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             
             <div className="flex items-center gap-4">
               <button 
+                onClick={() => navigate('/home')}
+                className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${location.pathname === '/home' ? 'text-primary-600 bg-primary-50' : 'text-slate-500 hover:text-slate-700'}`}
+                title="Home"
+              >
+                <Home size={20} />
+                <span className="hidden sm:inline text-sm font-medium">Home</span>
+              </button>
+              <button 
                 onClick={() => navigate('/devices')}
-                className={`p-2 rounded-md transition-colors ${location.pathname === '/devices' ? 'text-primary-600 bg-primary-50' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`flex items-center gap-2 px-3 py-2 rounded-md transition-colors ${location.pathname === '/devices' || location.pathname.startsWith('/dashboard') ? 'text-primary-600 bg-primary-50' : 'text-slate-500 hover:text-slate-700'}`}
                 title="Devices"
               >
                 <Smartphone size={20} />
+                <span className="hidden sm:inline text-sm font-medium">Devices</span>
               </button>
               <div className="h-6 w-px bg-slate-200"></div>
               <button 
