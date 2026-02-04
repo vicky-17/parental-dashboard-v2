@@ -323,22 +323,32 @@ app.post('/api/location', async (req, res) => {
     }
 });
 
+
+
+
+
+
+
+// File: server.js
+
 app.post('/api/apps', async (req, res) => {
     try {
         const { deviceId, apps } = req.body; 
         
         if (apps && Array.isArray(apps)) {
             for (const app of apps) {
-                // OVERWRITE logic: Always $set the current today usage
+                const incomingMinutes = app.minutes || 0;
+
+                // Use $max to ensure we only update if the usage has INCREASED.
+                // This protects against the phone reporting a stale/smaller bucket.
                 await AppRule.findOneAndUpdate(
                     { deviceId, packageName: app.packageName },
                     { 
                         $set: { 
                             appName: app.appName, 
-                            usedToday: app.minutes || 0, // OVERWRITES current database value
                             category: app.category || 'General' 
                         },
-                        // Only set these defaults if the record is brand new
+                        $max: { usedToday: incomingMinutes }, // Only update if higher
                         $setOnInsert: { isGlobalLocked: false, timeLimit: 0 }
                     },
                     { upsert: true }
@@ -351,6 +361,17 @@ app.post('/api/apps', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+
+
+
+
+
+
+
+
+
+
 
 // 5. Dashboard Data (Server -> Parent)
 app.get('/api/data/:deviceId/apps', authenticateToken, async (req, res) => {
