@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
+require('dotenv').config();
 // const bcrypt = require('bcryptjs');
 const path = require('path');
 const http = require('http');
@@ -23,6 +24,7 @@ const cron = require('node-cron'); // Ensure node-cron is installed: npm install
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = 'your_super_secret_key_123'; 
+const DAILY_RESET_TZ = process.env.DAILY_RESET_TZ || process.env.TZ || 'UTC';
 
 // 🔐 In-Memory Pending Pairings Store
 // Structure: { 'code': { userId, socketId, timestamp, timeoutId } }
@@ -344,7 +346,7 @@ cron.schedule('0 0 * * *', async () => {
     } catch (err) {
         console.error('❌ Daily reset failed:', err);
     }
-});
+}, { timezone: DAILY_RESET_TZ });
 
 // 2. Updated App Sync Route
 app.post('/api/apps', async (req, res) => {
@@ -353,19 +355,40 @@ app.post('/api/apps', async (req, res) => {
         
         if (apps && Array.isArray(apps)) {
             for (const app of apps) {
-                const incomingMinutes = app.minutes || 0;
+                if (!app || !app.packageName) continue;
 
-                // Removed $max: we now trust the Android device's "Today" calculation
+                const update = {
+                    $set: {
+                        appName: app.appName || app.packageName,
+                        category: app.category || 'General',
+                    },
+                    $setOnInsert: { isGlobalLocked: false, timeLimit: 0 }
+                };
+
+                // Support both payload formats:
+                // - minutes: absolute "today" minutes (preferred)
+                // - seconds: delta seconds since last sync (legacy)
+                let incomingMinutes = NaN;
+                if (app.minutes !== undefined && app.minutes !== null) {
+                    incomingMinutes = Number(app.minutes);
+                }
+
+                let incomingSeconds = NaN;
+                if (app.seconds !== undefined && app.seconds !== null) {
+                    incomingSeconds = Number(app.seconds);
+                }
+
+                if (Number.isFinite(incomingMinutes)) {
+                    update.$set.usedToday = Math.max(0, incomingMinutes);
+                } else if (Number.isFinite(incomingSeconds)) {
+                    update.$inc = { usedToday: Math.max(0, incomingSeconds) / 60 };
+                } else if (app.initialSync) {
+                    update.$set.usedToday = 0;
+                }
+
                 await AppRule.findOneAndUpdate(
                     { deviceId, packageName: app.packageName },
-                    { 
-                        $set: { 
-                            appName: app.appName, 
-                            category: app.category || 'General',
-                            usedToday: incomingMinutes // Direct overwrite
-                        },
-                        $setOnInsert: { isGlobalLocked: false, timeLimit: 0 }
-                    },
+                    update,
                     { upsert: true }
                 );
             }

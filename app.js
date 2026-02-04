@@ -13,6 +13,15 @@ let liveMarker = null;
 
 let currentSortMode = 'usage';
 
+function toMinutes(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.max(0, n) : 0;
+}
+
+function formatUsedMinutes(value) {
+    return `${Math.round(toMinutes(value))}m`;
+}
+
 
 // --- INIT ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -372,7 +381,7 @@ function applyAppSort() {
         switch (currentSortMode) {
             case 'usage':
                 // Higher usage first (descending)
-                return (b.usedToday || 0) - (a.usedToday || 0);
+                return toMinutes(b.usedToday) - toMinutes(a.usedToday);
             
             case 'alpha':
                 // A-Z (ascending)
@@ -482,12 +491,12 @@ function renderAppGrid() {
                             </div>
                             <div>
                                 <h4 class="font-bold text-slate-900 text-lg leading-tight">${app.appName || app.packageName}</h4>
-                                <div class="flex items-center gap-2 mt-1">
-                                    ${statusBadge}
-                                    <span class="text-xs text-slate-500 font-medium">| Used: ${app.usedToday || 0}m</span>
+                                    <div class="flex items-center gap-2 mt-1">
+                                        ${statusBadge}
+                                        <span class="text-xs text-slate-500 font-medium">| Used: ${formatUsedMinutes(app.usedToday)}</span>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
                         <button onclick="window.toggleAppLock('${index}')" 
                             class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm h-10 shrink-0
@@ -556,18 +565,19 @@ function updateDashboardUsageStats() {
     let totalMinutes = 0;
     let blockedCount = 0;
     currentApps.forEach(app => {
-        totalMinutes += (app.usedToday || 0);
+        totalMinutes += toMinutes(app.usedToday);
         if(app.isGlobalLocked) blockedCount++;
     });
 
     const usageEl = document.getElementById('dash-total-usage');
     const usageBar = document.getElementById('dash-usage-bar');
-    const hrs = Math.floor(totalMinutes / 60);
-    const mins = totalMinutes % 60;
+    const roundedTotal = Math.round(totalMinutes);
+    const hrs = Math.floor(roundedTotal / 60);
+    const mins = roundedTotal % 60;
 
     if(usageEl) usageEl.textContent = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
     if(usageBar) {
-        const pct = Math.min((totalMinutes / 120) * 100, 100); 
+        const pct = Math.min((roundedTotal / 120) * 100, 100); 
         usageBar.style.width = `${pct}%`;
     }
 
@@ -1298,8 +1308,4 @@ window.confirmDeleteDevice = async () => {
         btn.disabled = false;
     }
 };
-
-
-
-
 
