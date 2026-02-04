@@ -180,23 +180,41 @@ const Dashboard: React.FC = () => {
                           <div className="flex items-start justify-between gap-4">
                             
                             {/* Left: App Identity */}
-                            <div className="flex items-center gap-4">
-                                <div className={`w-14 h-14 rounded-xl flex items-center justify-center shadow-sm ${getAppColor(app.name)}`}>
+                            <div className="flex items-start gap-4 flex-1">
+                                <div className={`w-14 h-14 rounded-xl flex items-center justify-center shadow-sm shrink-0 mt-1 ${getAppColor(app.name)}`}>
                                     <span className="text-white font-bold text-2xl">{app.name.charAt(0)}</span>
                                 </div>
-                                <div>
-                                    <h4 className="font-bold text-slate-900 text-lg leading-tight">{app.name}</h4>
-                                    <p className="text-xs text-slate-500 font-medium mb-1">{app.category || 'General'}</p>
-                                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-600">
-                                        Used: {app.usedToday || 0}m / {app.dailyLimit || 0}m
-                                    </span>
+                                <div className="min-w-0 flex-1">
+                                    {/* App Name & Package */}
+                                    <h4 className="font-bold text-slate-900 text-2xl leading-tight truncate pr-2">{app.name}</h4>
+                                    <p className="text-xs text-slate-400 font-mono mb-3 truncate" title={app.packageName}>
+                                      {app.packageName}
+                                    </p>
+                                    
+                                    {/* Usage Stats (Big Display) */}
+                                    <div className="flex items-end gap-2 mb-2">
+                                        <span className="text-4xl font-black text-slate-800 leading-none tracking-tight">
+                                          {app.usedToday || 0}
+                                        </span>
+                                        <span className="text-sm font-bold text-slate-400 mb-1.5 uppercase tracking-wide">
+                                          min today
+                                        </span>
+                                    </div>
+
+                                    {/* Meta Info */}
+                                    <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+                                        <span className="bg-slate-100 px-2 py-0.5 rounded">{app.category || 'General'}</span>
+                                        {app.dailyLimit && app.dailyLimit > 0 && (
+                                           <span className="text-slate-400">Limit: {app.dailyLimit}m</span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
                             {/* Right: Master Switch */}
                             <button 
                                 onClick={() => toggleLock(idx)}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm ${
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm shrink-0 ${
                                     isLocked 
                                     ? 'bg-red-600 text-white hover:bg-red-700' 
                                     : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300'
