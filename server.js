@@ -16,6 +16,11 @@ const io = new Server(server, {
     }
 });
 
+
+const cron = require('node-cron'); // Ensure node-cron is installed: npm install node-cron
+
+
+
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = 'your_super_secret_key_123'; 
 
@@ -329,8 +334,19 @@ app.post('/api/location', async (req, res) => {
 
 
 
-// File: server.js
 
+// 1. Reset usage at midnight (Server Time)
+cron.schedule('0 0 * * *', async () => {
+    try {
+        console.log('🌅 Resetting daily app usage...');
+        await AppRule.updateMany({}, { $set: { usedToday: 0 } });
+        console.log('✅ Daily reset complete.');
+    } catch (err) {
+        console.error('❌ Daily reset failed:', err);
+    }
+});
+
+// 2. Updated App Sync Route
 app.post('/api/apps', async (req, res) => {
     try {
         const { deviceId, apps } = req.body; 
@@ -339,16 +355,15 @@ app.post('/api/apps', async (req, res) => {
             for (const app of apps) {
                 const incomingMinutes = app.minutes || 0;
 
-                // Use $max to ensure we only update if the usage has INCREASED.
-                // This protects against the phone reporting a stale/smaller bucket.
+                // Removed $max: we now trust the Android device's "Today" calculation
                 await AppRule.findOneAndUpdate(
                     { deviceId, packageName: app.packageName },
                     { 
                         $set: { 
                             appName: app.appName, 
-                            category: app.category || 'General' 
+                            category: app.category || 'General',
+                            usedToday: incomingMinutes // Direct overwrite
                         },
-                        $max: { usedToday: incomingMinutes }, // Only update if higher
                         $setOnInsert: { isGlobalLocked: false, timeLimit: 0 }
                     },
                     { upsert: true }
@@ -361,6 +376,7 @@ app.post('/api/apps', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
 
 
 
