@@ -1200,7 +1200,51 @@ window.saveDeviceSettings = async () => {
 
 
 
+// ==========================================
+// --- DELETE DEVICE LOGIC ---
+// ==========================================
 
+window.openDeleteModal = () => {
+    if (!currentDevice) return;
+    // Set the name in the modal so the user knows what they are deleting
+    document.getElementById('del-device-name').textContent = currentDevice.name || "this device";
+    document.getElementById('delete-modal').classList.remove('hidden');
+};
+
+window.confirmDeleteDevice = async () => {
+    if (!currentDevice) return;
+    
+    // Show loading state on the button
+    const btn = document.querySelector('#delete-modal .bg-red-600');
+    const originalText = btn.innerText;
+    btn.innerHTML = `<i data-lucide="loader-2" class="animate-spin inline mr-1" width="14"></i> Removing...`;
+    btn.disabled = true;
+
+    try {
+        // Call the Delete API
+        await authenticatedFetch(`/devices/${currentDevice._id}`, { method: 'DELETE' });
+        
+        // Hide Modal
+        document.getElementById('delete-modal').classList.add('hidden');
+        
+        // Reset Button
+        btn.innerText = originalText;
+        btn.disabled = false;
+
+        // Clear current device and reload list
+        currentDevice = null;
+        await loadDevices(); // This will auto-select the next available device or show empty state
+        
+        // Switch to dashboard tab to avoid staying on a broken settings page
+        switchTab('dashboard');
+
+    } catch (err) {
+        console.error(err);
+        alert("Failed to delete device. Please try again.");
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+};
 
 
 

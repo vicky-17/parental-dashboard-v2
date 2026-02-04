@@ -518,6 +518,19 @@
                     </div>
 
                 </div>
+
+                <div class="mt-8 pt-8 border-t border-slate-100">
+                    <div class="bg-red-50 p-6 rounded-xl border border-red-100">
+                        <h4 class="text-sm font-bold text-red-900 uppercase tracking-wider mb-2">Danger Zone</h4>
+                        <p class="text-xs text-red-600 mb-4">
+                            Removing this device will permanently delete all tracking history, app rules, and logs. This action cannot be undone.
+                        </p>
+                        <button onclick="window.openDeleteModal()" class="w-full bg-white border border-red-200 text-red-600 font-bold py-3 rounded-lg hover:bg-red-600 hover:text-white transition-colors flex items-center justify-center gap-2 shadow-sm">
+                            <i data-lucide="trash-2" width="18"></i>
+                            <span>Remove This Device</span>
+                        </button>
+                    </div>
+                </div>
             </div>
             <!-- ------------------- -->
 
@@ -529,7 +542,7 @@
 
         </div>
 
-        <div id="pairing-modal" class="hidden fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 backdrop-blur-sm">
+        <div id="pairing-modal" class="hidden fixed inset-0 bg-slate-900/50 flex items-center justify-center z-[5000] backdrop-blur-sm">
             <div class="bg-white p-8 rounded-2xl shadow-2xl w-96 text-center">
                 <div class="w-12 h-12 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-600">
                     <i data-lucide="smartphone" width="24"></i>
@@ -542,6 +555,23 @@
          </div>
 
     </main>
+
+    <div id="delete-modal" class="hidden fixed inset-0 bg-slate-900/50 flex items-center justify-center z-[6000] backdrop-blur-sm">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-96 text-center animate-fade-in mx-4">
+            <div class="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4 text-red-600">
+                <i data-lucide="alert-triangle" width="24"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900 mb-2">Remove Device?</h3>
+            <p class="text-sm text-slate-500 mb-6">
+                Are you sure you want to remove <span id="del-device-name" class="font-bold text-slate-800">this device</span>?
+                <br>All data will be lost immediately.
+            </p>
+            <div class="flex gap-3">
+                <button onclick="document.getElementById('delete-modal').classList.add('hidden')" class="flex-1 py-2.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 font-bold text-sm">Cancel</button>
+                <button onclick="window.confirmDeleteDevice()" class="flex-1 py-2.5 rounded-lg bg-red-600 text-white hover:bg-red-700 font-bold text-sm shadow-lg shadow-red-200 transition-colors">Yes, Remove</button>
+            </div>
+        </div>
+    </div>
 
     
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
