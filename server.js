@@ -457,27 +457,71 @@ app.post('/api/rules/update', authenticateToken, async (req, res) => {
 
 
 // --- NEW API ROUTES FOR WEB SAFETY ---
+// ------------------------------------------
+// 1. POST: RECEIVE Browser History from App
+// ------------------------------------------
+app.post('/api/browser-history', async (req, res) => {
+    try {
+        const { deviceId, history } = req.body; // history is an array: ["url|time", "url|time"]
 
-// 1. Get Web Config & History
+        if (!deviceId || !history || history.length === 0) {
+            return res.status(400).json({ error: "Missing data" });
+        }
+
+        let filter = await WebFilter.findOne({ deviceId: deviceId });
+        
+        // Create new record if device doesn't exist
+        if (!filter) {
+            filter = new WebFilter({
+                deviceId: deviceId,
+                blockedCategories: [],
+                blockedUrls: [],
+                history: []
+            });
+        }
+
+        // Parse the Android data string ("url|timestamp") into objects
+        const newEntries = history.map(item => {
+            const parts = item.split('|');
+            const url = parts[0];
+            const timestamp = parseInt(parts[1]) || Date.now();
+            
+            return {
+                title: "Visited Site", // Title is not sent by accessibility service easily
+                url: url,
+                riskScore: 0, // You can add logic here to check if URL is bad
+                timestamp: new Date(timestamp)
+            };
+        });
+
+        // Add to history and save
+        filter.history.push(...newEntries);
+        await filter.save();
+
+        console.log(`✅ Saved ${newEntries.length} history items for ${deviceId}`);
+        res.json({ success: true });
+
+    } catch (error) {
+        console.error("Save History Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ------------------------------------------
+// 2. GET: SEND Web Config & History to Web Dashboard
+// ------------------------------------------
 app.get('/api/web/:deviceId', authenticateToken, async (req, res) => {
     try {
         let filter = await WebFilter.findOne({ deviceId: req.params.deviceId });
-        
-        // Create default if not exists (Mocking history for demo)
+
+        // If no data exists, return an empty object instead of creating FAKE data
         if (!filter) {
-            filter = new WebFilter({
+            return res.json({ 
                 deviceId: req.params.deviceId,
-                blockedCategories: ['pornography', 'gambling'],
-                blockedUrls: ['gambling-site.com'],
-                history: [
-                    { title: "Math Homework Help", url: "https://khanacademy.org/math", riskScore: 5, timestamp: new Date(Date.now() - 1000 * 60 * 5) },
-                    { title: "Free Game Mods", url: "https://unknown-mods.net/download", riskScore: 85, timestamp: new Date(Date.now() - 1000 * 60 * 30) },
-                    { title: "Social Media Login", url: "https://facebook.com", riskScore: 45, timestamp: new Date(Date.now() - 1000 * 60 * 120) },
-                    { title: "Wikipedia - History", url: "https://wikipedia.org/wiki/WWII", riskScore: 10, timestamp: new Date(Date.now() - 1000 * 60 * 180) }
-                ]
+                history: [] 
             });
-            await filter.save();
         }
+        
         res.json(filter);
     } catch (error) {
         res.status(500).json({ error: error.message });
