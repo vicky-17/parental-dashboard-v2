@@ -402,7 +402,8 @@ app.post('/api/apps', async (req, res) => {
 
 // [ADD THIS NEW ROUTE]
 // 7. Get Blocked Apps List (For Android Sync)
-app.get('/api/rules/blocked/:deviceId', authenticateToken, async (req, res) => {
+// [FIXED] 7. Get Blocked Apps List (Removed authenticateToken for device access)
+app.get('/api/rules/blocked/:deviceId', async (req, res) => {
     try {
         const { deviceId } = req.params;
         
@@ -425,7 +426,6 @@ app.get('/api/rules/blocked/:deviceId', authenticateToken, async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-
 
 
 
