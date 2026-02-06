@@ -400,7 +400,31 @@ app.post('/api/apps', async (req, res) => {
     }
 });
 
+// [ADD THIS NEW ROUTE]
+// 7. Get Blocked Apps List (For Android Sync)
+app.get('/api/rules/blocked/:deviceId', authenticateToken, async (req, res) => {
+    try {
+        const { deviceId } = req.params;
+        
+        // Find apps that are either:
+        // 1. Globally Locked (isGlobalLocked = true)
+        // 2. Time Limit Exceeded (timeLimit > 0 AND usedToday >= timeLimit)
+        const rules = await AppRule.find({
+            deviceId: deviceId,
+            $or: [
+                { isGlobalLocked: true },
+                { $expr: { $and: [ { $gt: ["$timeLimit", 0] }, { $gte: ["$usedToday", "$timeLimit"] } ] } }
+            ]
+        });
 
+        // Return just the package names array
+        const blockedPackages = rules.map(r => r.packageName);
+        res.json({ blockedPackages });
+        
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 
 
 
@@ -855,3 +879,19 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
