@@ -23,10 +23,13 @@ const admin = require("firebase-admin");
 let serviceAccount;
 
 if (process.env.FIREBASE_CREDENTIALS) {
-    // 1. If running on Heroku, read the key from the Environment Variable
     serviceAccount = JSON.parse(process.env.FIREBASE_CREDENTIALS);
+    
+    // THIS IS THE MAGIC LINE: It fixes Heroku's broken formatting
+    if (serviceAccount.private_key) {
+        serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+    }
 } else {
-    // 2. If running locally on your computer, read from the physical file
     serviceAccount = require("./firebase-admin-key.json");
 }
 
