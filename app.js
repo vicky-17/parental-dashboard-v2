@@ -147,6 +147,9 @@ async function initDashboard() {
     });
 
     await loadDevices();
+
+    // Request notification permissions after the dashboard loads
+    setupPushNotifications();
 }
 
 async function authenticatedFetch(endpoint, options = {}) {
@@ -1308,4 +1311,93 @@ window.confirmDeleteDevice = async () => {
         btn.disabled = false;
     }
 };
+
+
+
+
+
+// --- PUSH NOTIFICATION SETUP ---
+
+// WARNING: Put your actual VAPID_PUBLIC_KEY here. 
+// It is 100% safe to expose the PUBLIC key in frontend code. 
+// NEVER expose the PRIVATE key here.
+const PUBLIC_VAPID_KEY = 'BBpkG463YcRpIx2KyONqYXH2j3QpOYPNW42WE4s0cg8PAJ_YJ1hCaxKvrIMRseQvl3lNxZOviQl1Ko5mXEhbHJY';
+
+async function setupPushNotifications() {
+    // 1. Check if the browser supports Service Workers and Push Notifications
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+        try {
+            // 2. Register the Service Worker (sw.js)
+            const register = await navigator.serviceWorker.register('/sw.js');
+            console.log('✅ Service Worker Registered');
+
+            // 3. Ask the parent for permission
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                console.log('❌ Push permission denied by user.');
+                return;
+            }
+
+            // 4. Subscribe the browser to the Push Service (Google/Apple)
+            const subscription = await register.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
+            });
+
+            // 5. Send the subscription to your Node.js server to save in MongoDB
+            await authenticatedFetch('/notifications/subscribe', {
+                method: 'POST',
+                body: JSON.stringify(subscription)
+            });
+            
+            console.log('✅ Successfully subscribed to Push Notifications!');
+
+        } catch (error) {
+            console.error('❌ Push Setup Error:', error);
+        }
+    } else {
+        console.warn('Push messaging is not supported in this browser.');
+    }
+}
+
+// Helper function required by the Web Push protocol to format your public key
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding)
+        .replace(/\-/g, '+')
+        .replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
