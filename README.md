@@ -1,5 +1,5 @@
 <div align="center">
-  <img width="1200" height="475" alt="GHBanner" src="" />
+  <img width="1200" height="475" alt="" src="" />
 </div>
 
 # ParentGuard - Parental Control Dashboard

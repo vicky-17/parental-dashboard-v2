@@ -878,6 +878,114 @@ io.on('connection', (socket) => {
     });
 });
 
+
+
+
+
+
+
+
+
+
+
+const webpush = require('web-push');
+
+// 1. Configure Web Push with your keys from .env
+webpush.setVapidDetails(
+    'mailto:debashishtelgram@gmail.com', // Replace with your real developer email
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+);
+
+// 2. Create a MongoDB Schema to store the Subscriptions
+const PushSubscriptionSchema = new mongoose.Schema({
+    userId: { type: String, required: true, unique: true }, // Links to the parent
+    subscription: { type: Object, required: true } // The data from the browser
+});
+const PushSubscription = mongoose.model('PushSubscription', PushSubscriptionSchema);
+
+// 3. API Route: Frontend sends the subscription here to be saved
+app.post('/api/notifications/subscribe', authenticateToken, async (req, res) => {
+    try {
+        const subscription = req.body;
+        
+        // Save or update the subscription for this logged-in parent
+        await PushSubscription.findOneAndUpdate(
+            { userId: req.user.userId }, 
+            { subscription: subscription },
+            { upsert: true, new: true }
+        );
+        
+        res.status(201).json({ success: true, message: "Subscribed to push" });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 4. Function to send a notification to a specific user
+async function sendNotificationToParent(userId, title, body) {
+    try {
+        // Find the user's phone subscription in the database
+        const subRecord = await PushSubscription.findOne({ userId: userId });
+        
+        if (!subRecord) {
+            console.log(`No push subscription found for user ${userId}`);
+            return;
+        }
+
+        // The payload (what the notification looks like)
+        const payload = JSON.stringify({
+            title: title,
+            body: body,
+            icon: '/shield-icon.png', // Add a small logo to your public folder
+            url: '/dashboard.html'    // Where clicking it takes them
+        });
+
+        // Fire the notification
+        await webpush.sendNotification(subRecord.subscription, payload);
+        console.log(`✅ Push notification sent to ${userId}`);
+
+    } catch (error) {
+        console.error("❌ Failed to send push:", error.message);
+        // If error.statusCode is 410, it means the user revoked permission or cleared cookies.
+        if (error.statusCode === 410) {
+            await PushSubscription.deleteOne({ userId: userId });
+            console.log(`Deleted expired subscription for ${userId}`);
+        }
+    }
+}
+
+// 5. TEST: Send a random notification every 2 minutes
+// (You can comment this out later, it's just to prove it works from server.js)
+setInterval(async () => {
+    // Get all users who have subscribed
+    const allSubscribers = await PushSubscription.find({});
+    
+    if (allSubscribers.length > 0) {
+        const randomTitles = ["App Alert", "Location Update", "Daily Summary"];
+        const randomBodies = [
+            "Child device has been online for 2 hours.",
+            "Child arrived at 'School' safe zone.",
+            "New blocked app attempt detected."
+        ];
+
+        // Pick random text
+        const title = randomTitles[Math.floor(Math.random() * randomTitles.length)];
+        const body = randomBodies[Math.floor(Math.random() * randomBodies.length)];
+
+        // Send to everyone who is subscribed (For testing)
+        // In reality, you would pass a specific userId here
+        for (const sub of allSubscribers) {
+            sendNotificationToParent(sub.userId, title, body);
+        }
+    }
+}, 2 * 60 * 1000); // 120,000 ms = 2 minutes
+
+
+
+
+
+
 server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
 
 
