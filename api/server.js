@@ -17,6 +17,17 @@ const webpush = require('web-push');        // Library to send push notification
 
 
 
+const admin = require("firebase-admin");
+
+// Initialize Firebase Admin with your downloaded key
+const serviceAccount = require("./firebase-admin-key.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+
+
 
 // ==========================================
 // --- SERVER & SOCKET INITIALIZATION ---
@@ -200,6 +211,8 @@ const PushSubscription = mongoose.model('PushSubscription', PushSubscriptionSche
 
 
 
+
+
 // ==========================================
 // --- AUTHENTICATION MIDDLEWARE ---
 // ==========================================
@@ -215,6 +228,12 @@ const authenticateToken = (req, res, next) => {
         next(); // Proceed to the actual route handler
     });
 };
+
+
+
+
+
+
 
 
 
@@ -283,7 +302,19 @@ app.post('/api/auth/login', async (req, res) => {
 
 
 
-
+app.post('/api/devices/update-token', async (req, res) => {
+    try {
+        const { deviceId, fcmToken } = req.body;
+        await Device.findOneAndUpdate(
+            { deviceId: deviceId },
+            { $set: { fcmToken: fcmToken } }
+        );
+        console.log(`📱 [FCM] Token updated for device ${deviceId}`);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 
 
 // ==========================================
@@ -846,14 +877,32 @@ app.post('/api/settings/update', authenticateToken, async (req, res) => {
     try {
         const { deviceId, bedtimeWeeknight, bedtimeWeekend, uninstallProtection, locationTracking } = req.body;
         
+        // 1. Save settings to MongoDB
         const settings = await Settings.findOneAndUpdate(
             { deviceId },
             { $set: { bedtimeWeeknight, bedtimeWeekend, uninstallProtection, locationTracking } },
             { new: true, upsert: true }
         );
-        console.log(`⚙️ [SETTINGS] Updated for device ${deviceId}`);
+        
+        // 2. Find the Android device's FCM Token
+        const device = await Device.findOne({ deviceId: deviceId });
+        
+        if (device && device.fcmToken) {
+            // 3. Send a SILENT data message to Android
+            const message = {
+                data: {
+                    action: "SYNC_SETTINGS" // Tells Android what to do
+                },
+                token: device.fcmToken
+            };
+
+            await admin.messaging().send(message);
+            console.log(`🚀 [FCM] Silent ping sent to wake up device ${deviceId}!`);
+        }
+
         res.json({ success: true, settings });
     } catch (error) {
+        console.error(error);
         res.status(500).json({ error: error.message });
     }
 });

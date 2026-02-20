@@ -43,3 +43,11 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+
+
+
+
+firebase-admin-key.json
+
+
