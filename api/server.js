@@ -16,27 +16,37 @@ const webpush = require('web-push');        // Library to send push notification
 
 
 
-
 const admin = require("firebase-admin");
 
-// Initialize Firebase Admin Securely
-let serviceAccount;
+// --- SAFE FIREBASE INITIALIZATION ---
+try {
+    let serviceAccount;
 
-if (process.env.FIREBASE_CREDENTIALS) {
-    serviceAccount = JSON.parse(process.env.FIREBASE_CREDENTIALS);
-    
-    // THIS IS THE MAGIC LINE: It fixes Heroku's broken formatting
-    if (serviceAccount.private_key) {
-        serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+    if (process.env.FIREBASE_CREDENTIALS) {
+        // PRODUCTION: Use Environment Variable from Vercel/Heroku
+        serviceAccount = JSON.parse(process.env.FIREBASE_CREDENTIALS);
+        
+        // FIX: Ensure private key handles newline characters correctly
+        if (serviceAccount.private_key) {
+            serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+        }
+        console.log("📱 [FCM] Using credentials from Environment Variables");
+    } else {
+        // DEVELOPMENT: Use local JSON file
+        serviceAccount = require("./firebase-admin-key.json");
+        console.log("📱 [FCM] Using credentials from local JSON file");
     }
-} else {
-    serviceAccount = require("./firebase-admin-key.json");
+
+    // Initialize only if no apps exist to prevent "Already Initialized" error
+    if (!admin.apps.length) {
+        admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount)
+        });
+        console.log("📱 [FCM] ✅ Firebase Admin initialized successfully");
+    }
+} catch (error) {
+    console.error("📱 [FCM] ❌ Initialization Error:", error.message);
 }
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
-
 
 
 
