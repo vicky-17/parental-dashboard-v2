@@ -19,8 +19,16 @@ const webpush = require('web-push');        // Library to send push notification
 
 const admin = require("firebase-admin");
 
-// Initialize Firebase Admin with your downloaded key
-const serviceAccount = require("./firebase-admin-key.json");
+// Initialize Firebase Admin Securely
+let serviceAccount;
+
+if (process.env.FIREBASE_CREDENTIALS) {
+    // 1. If running on Heroku, read the key from the Environment Variable
+    serviceAccount = JSON.parse(process.env.FIREBASE_CREDENTIALS);
+} else {
+    // 2. If running locally on your computer, read from the physical file
+    serviceAccount = require("./firebase-admin-key.json");
+}
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
