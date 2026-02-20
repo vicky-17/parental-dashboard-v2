@@ -1,5 +1,5 @@
 import { apiFetch, setAuthToken, removeAuthToken } from './api';
-import { User } from '../types';
+import { User } from '../utils/types';
 
 export const authService = {
   login: async (email: string, password: string): Promise<User> => {

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { apiFetch } from '../services/api';
-import { AppData, LocationData } from '../types';
+import { AppData, LocationData } from '../utils/types';
 import { MapPin, Grid, Clock, Navigation, AlertCircle, RefreshCw, Lock, Unlock, Plus, Trash2, Smartphone } from 'lucide-react';
 
 const Dashboard: React.FC = () => {

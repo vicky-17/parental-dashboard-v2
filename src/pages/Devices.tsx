@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch, getAuthToken } from '../services/api';
-import { Device } from '../types';
+import { Device } from '../utils/types';
 import { Plus, Smartphone, Tablet, Monitor, MoreVertical, Loader2, Trash2, RefreshCw, X, AlertTriangle } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
-import { API_BASE_URL } from '../constants';
+import { API_BASE_URL } from '../utils/constants';
 
 const Devices: React.FC = () => {
   const [devices, setDevices] = useState<Device[]>([]);

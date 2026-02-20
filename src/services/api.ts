@@ -1,4 +1,4 @@
-import { API_BASE_URL } from '../constants';
+import { API_BASE_URL } from '../utils/constants';
 
 export const getAuthToken = (): string | null => {
   const match = document.cookie.match(new RegExp('(^| )token=([^;]+)'));
