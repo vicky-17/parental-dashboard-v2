@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ParentalWatch | Dashboard</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="style.css">
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        /* Custom Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Map Drawing Cursor */
+        .drawing-cursor { cursor: crosshair !important; }
+    </style>
+
+</head>
+<body class="bg-slate-50 text-slate-900 h-screen flex overflow-hidden font-sans antialiased">
+
+    <aside class="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm z-20 transition-transform duration-300 -translate-x-full lg:translate-x-0 fixed lg:relative h-full" id="sidebar">
+        <div class="h-16 flex items-center px-6 border-b border-slate-100">
+            <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center mr-3 shadow-indigo-200 shadow-sm">
+                <i data-lucide="shield" class="text-white" width="18"></i>
+            </div>
+            <span class="font-bold text-lg text-slate-800 tracking-tight">ParentalWatch</span>
+        </div>
+        
+
+
+
+       <!-- Nav Bar  -->
+        <nav class="flex-1 p-4 space-y-1 overflow-y-auto custom-scrollbar">
+            <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item active w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-600 hover:bg-slate-50">
+                <i data-lucide="activity" width="18"></i> Home
+            </button>
+            <button onclick="switchTab('apps')" id="nav-apps" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-600 hover:bg-slate-50">
+                <i data-lucide="clock" width="18"></i> App Usage & Rules
+            </button>
+            <button onclick="switchTab('web')" id="nav-web" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-600 hover:bg-slate-50">
+                <i data-lucide="globe" width="18"></i> Web Safety
+            </button>
+            <button onclick="switchTab('location')" id="nav-location" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-600 hover:bg-slate-50">
+                <i data-lucide="map-pin" width="18"></i> Geofencing
+            </button>
+            <button onclick="switchTab('settings')" id="nav-settings" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-600 hover:bg-slate-50">
+                <i data-lucide="settings" width="18"></i> Settings
+            </button>
+        </nav>
+        <!-- -------- -->
+
+
+
+
+
+
+        <div class="p-4 border-t border-slate-100 bg-slate-50/50">
+            <div class="flex items-center justify-between mb-2">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Devices</h3>
+                <span id="device-count" class="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">0</span>
+            </div>
+            
+            <ul id="device-list" class="space-y-1 mb-3 max-h-32 overflow-y-auto custom-scrollbar">
+                <li class="text-xs text-slate-400 italic">Loading...</li>
+            </ul>
+
+            <button id="add-device-btn" class="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-indigo-600 p-2 rounded-lg hover:border-indigo-400 transition-all text-xs font-bold shadow-sm">
+                <i data-lucide="plus" width="14"></i> Add Device
+            </button>
+            
+            <button id="logout-btn" class="w-full mt-2 flex items-center justify-center gap-2 text-red-600 hover:bg-red-50 py-2 rounded-lg text-xs font-medium transition-all">
+                <i data-lucide="log-out" width="14"></i> Sign Out
+            </button>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col h-full overflow-hidden relative w-full">
+        
+        <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 lg:px-8 shadow-sm shrink-0 z-10">
+            <div class="flex items-center gap-4">
+                <button id="mobile-menu-btn" class="lg:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-lg">
+                    <i data-lucide="menu" width="24"></i>
+                </button>
+                <div class="flex flex-col">
+                    <h2 id="page-title" class="text-lg font-bold text-slate-800 leading-tight">Dashboard</h2>
+                    <div id="device-status-header" class="hidden flex items-center gap-1.5">
+                        <div class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+                        <span id="current-device-name-header" class="text-xs font-medium text-slate-500">Device Name</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <div class="text-right hidden sm:block">
+                    <p class="text-[10px] text-slate-400 font-bold uppercase">Last Synced</p>
+                    <p id="last-synced-time" class="text-xs font-bold text-slate-700">Just now</p>
+                </div>
+                <button onclick="window.location.reload()" class="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-full shadow-md shadow-indigo-200 transition-transform active:scale-95">
+                    <i data-lucide="refresh-cw" width="16"></i>
+                </button>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-4 lg:p-8 bg-slate-50 scroll-smooth" id="main-scroll">
+            
+            <div id="empty-state" class="flex flex-col items-center justify-center h-full text-slate-400">
+                <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                    <i data-lucide="smartphone" width="32" class="opacity-40"></i>
+                </div>
+                <p class="text-lg font-medium">Select a device from the sidebar</p>
+            </div>
+
+
+
+
+
+            <!-- view-dashboard -->
+            <div id="view-dashboard" class="tab-content hidden animate-fade-in max-w-6xl mx-auto space-y-8">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-red-500 relative overflow-hidden group">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Security Alerts</p>
+                                <h3 class="text-3xl font-bold text-slate-800 mt-1" id="dash-security-count">0</h3>
+                                <p class="text-xs text-red-500 font-medium mt-2 flex items-center gap-1">
+                                    <i data-lucide="alert-octagon" width="12"></i> 
+                                    <span id="dash-security-text">No threats detected</span>
+                                </p>
+                            </div>
+                            <div class="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center text-red-500">
+                                <i data-lucide="shield-alert" width="20"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Screen Time</p>
+                                <h3 class="text-3xl font-bold text-slate-800 mt-1" id="dash-total-usage">0m</h3>
+                            </div>
+                            <div class="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center text-orange-500">
+                                <i data-lucide="clock" width="20"></i>
+                            </div>
+                        </div>
+                        <div class="w-full bg-orange-50 h-2 rounded-full overflow-hidden">
+                            <div id="dash-usage-bar" class="h-full bg-orange-500 rounded-full" style="width: 0%"></div>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-2 text-right">Daily Limit: 2h</p>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                        <div class="flex items-center gap-4 h-full">
+                            <div class="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center text-green-600 animate-pulse">
+                                <i data-lucide="activity" width="24"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-slate-800">System Active</h3>
+                                <p class="text-sm text-green-600 font-medium">All systems normal</p>
+                                <p class="text-xs text-slate-400 mt-1" id="dash-last-ping">Ping: Just now</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+
+
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col lg:flex-row h-[32rem]">
+    
+                    <div id="liveMap" class="flex-1 bg-slate-100 relative"></div>
+
+
+                    <div class="w-full lg:w-80 bg-white border-l border-slate-100 flex flex-col">
+                        <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                            <h4 class="font-bold text-slate-800 flex items-center gap-2">
+                                <i data-lucide="radio" class="text-red-500 animate-pulse" width="18"></i> Live Tracking
+                            </h4>
+                            <span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded border border-green-200 uppercase">Connected</span>
+                        </div>
+
+                        <div class="flex-1 p-6 space-y-6">
+                            <div class="relative pl-6 border-l-2 border-indigo-100 space-y-6">
+                                <div class="relative">
+                                    <div class="absolute -left-[29px] w-4 h-4 bg-indigo-600 rounded-full border-4 border-white shadow-sm"></div>
+                                    <p class="text-xs text-slate-400 font-bold uppercase mb-1">Current Address</p>
+                                    <p class="text-sm font-medium text-slate-800 leading-relaxed" id="dash-address">Locating...</p>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3 mt-6">
+                                <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                    <p class="text-[10px] text-slate-400 font-bold uppercase">Speed</p>
+                                    <p class="text-lg font-bold text-slate-800" id="dash-speed">0 <span class="text-xs text-slate-400 font-normal">mph</span></p>
+                                </div>
+                                <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                    <p class="text-[10px] text-slate-400 font-bold uppercase">Battery</p>
+                                    <div class="flex items-center gap-2 mt-1">
+                                        <div class="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                            <div id="dash-battery-bar" class="h-full bg-green-500" style="width: 0%"></div>
+                                        </div>
+                                        <span class="text-xs font-bold text-slate-700" id="dash-battery-text">--</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-slate-900 text-slate-300 p-3 rounded-xl font-mono text-xs flex justify-between">
+                                <span>LAT: <span id="dash-lat">--</span></span>
+                                <span>LNG: <span id="dash-lng">--</span></span>
+                            </div>
+                        </div>
+
+                        <div class="p-4 border-t border-slate-100 text-center">
+                            <button onclick="switchTab('location')" class="text-xs font-bold text-indigo-600 hover:underline">View Full Route History</button>
+                        </div>
+                    </div>
+                </div>
+
+
+                <div class="bg-gradient-to-r from-indigo-600 to-purple-700 rounded-2xl shadow-lg p-6 text-white flex items-start gap-5 relative overflow-hidden">
+                    <div class="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
+                    
+                    <div class="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center shrink-0 backdrop-blur-sm">
+                        <i data-lucide="brain-circuit" width="24" class="text-white"></i>
+                    </div>
+                    
+                    <div class="relative z-10">
+                        <h4 class="font-bold text-lg mb-1 flex items-center gap-2">Smart Insight <span class="bg-white/20 text-[10px] px-2 py-0.5 rounded uppercase">Beta</span></h4>
+                        <p class="text-indigo-100 text-sm leading-relaxed max-w-2xl">
+                            Based on recent activity, screen time has increased by 15% this week. Most usage is coming from 
+                            <span class="font-bold text-white">Roblox</span> during school hours. Consider setting a scheduled lock.
+                        </p>
+                        <button class="mt-4 text-xs font-bold bg-white text-indigo-600 px-4 py-2 rounded-lg hover:bg-indigo-50 transition-colors">
+                            View Recommendation
+                        </button>
+                    </div>
+                </div>
+
+                
+
+            </div>
+
+
+
+
+
+
+
+            <div id="view-apps" class="tab-content hidden animate-fade-in max-w-6xl mx-auto space-y-6">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-2">
+                    <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    App Limits & Schedules
+                    </h3>
+                    
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs font-bold text-slate-500 uppercase">Sort By:</label>
+                        <select onchange="window.handleSortChange(this.value)" class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2 shadow-sm outline-none cursor-pointer">
+                            <option value="usage">Highest Usage (Default)</option>
+                            <option value="alpha">Name (A-Z)</option>
+                            <option value="locked">Locked First</option>
+                            <option value="unlocked">Unlocked First</option>
+                        </select>
+                    </div>
+                </div>
+            
+                <div id="app-grid-container" class="grid grid-cols-1 md:grid-cols-2 gap-6 pb-12">
+                    <div class="col-span-full text-center text-slate-400 py-12">
+                        <i data-lucide="loader" class="animate-spin mx-auto mb-2"></i>
+                        <p>Loading app data...</p>
+                     </div>
+                </div>
+            </div>
+
+
+
+
+
+            <!------- view-web ---------->
+            <div id="view-web" class="tab-content hidden animate-fade-in max-w-7xl mx-auto pb-12">
+                
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    
+                    <div class="space-y-6">
+                        
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div class="p-4 border-b border-slate-100 flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+                                    <i data-lucide="shield" width="18"></i>
+                                </div>
+                                <h3 class="font-bold text-slate-700">Block Categories</h3>
+                            </div>
+                            <div class="p-4 space-y-4" id="category-list">
+                                <div class="flex items-center justify-center text-slate-400 py-4">
+                                    <i data-lucide="loader-2" class="animate-spin" width="20"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div class="p-4 border-b border-slate-100 flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center text-red-500">
+                                    <i data-lucide="alert-octagon" width="18"></i>
+                                </div>
+                                <h3 class="font-bold text-slate-700">Blocked URLs</h3>
+                            </div>
+                            
+                            <div class="p-4 max-h-60 overflow-y-auto custom-scrollbar space-y-2" id="url-list">
+                            </div>
+
+                            <div class="p-4 bg-slate-50 border-t border-slate-100 flex gap-2">
+                                <input type="text" id="new-url-input" placeholder="example.com" 
+                                    class="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none transition-colors">
+                                <button onclick="window.addBlockedUrl()" 
+                                        class="bg-slate-900 hover:bg-slate-800 text-white p-2 rounded-lg transition-colors flex items-center justify-center">
+                                    <i data-lucide="plus" width="18"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-2">
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden h-full flex flex-col">
+                            
+                            <div class="p-6 bg-purple-50/50 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                <div class="flex items-center gap-3">
+                                    <div class="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                                        <i data-lucide="globe" width="20"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="text-lg font-bold text-slate-800">Browser History</h3>
+                                        <p class="text-xs text-slate-500">Real-time monitoring & insights</p>
+                                    </div>
+                                </div>
+                                
+                                <button onclick="window.analyzeWebSafety()" id="ai-trigger-btn"
+                                        class="group flex items-center gap-2 bg-purple-100 hover:bg-purple-200 text-purple-700 px-4 py-2 rounded-xl transition-all font-bold text-sm border border-purple-200">
+                                    <i data-lucide="brain-circuit" width="18" class="group-hover:scale-110 transition-transform"></i>
+                                    <span id="ai-btn-text">Analyze Risks with AI</span>
+                                </button>
+                            </div>
+
+                            <div id="ai-insight-box" class="hidden m-6 p-5 bg-purple-50 border border-purple-100 rounded-xl relative">
+                                <div class="absolute top-0 left-0 w-1 h-full bg-purple-400 rounded-l-xl"></div>
+                                <div class="flex gap-3">
+                                    <i data-lucide="sparkles" class="text-purple-600 shrink-0 mt-0.5" width="18"></i>
+                                    <div class="space-y-1">
+                                        <h4 class="text-xs font-bold text-purple-400 uppercase tracking-wider">Gemini Insight</h4>
+                                        <p id="ai-result-text" class="text-sm text-purple-900 leading-relaxed font-medium">
+                                            </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex-1 p-6 overflow-hidden flex flex-col">
+                                <div class="border border-slate-200 rounded-xl overflow-hidden flex-1 flex flex-col">
+                                    <div class="bg-slate-50 border-b border-slate-200 px-4 py-2 grid grid-cols-12 gap-4 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                                        <div class="col-span-3">Timestamp</div>
+                                        <div class="col-span-7">Page Title / URL</div>
+                                        <div class="col-span-2 text-right">Risk Score</div>
+                                    </div>
+                                    <div class="overflow-y-auto flex-1 custom-scrollbar bg-white" id="history-rows">
+                                        </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+            <!-- ------------------ -->
+
+
+
+
+
+
+            <!-- view-location -->
+            <div id="view-location" class="tab-content hidden animate-fade-in max-w-7xl mx-auto pb-12">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-12rem)] min-h-[600px]">
+                    <div class="flex flex-col gap-4 h-full">
+                        <div>
+                            <h3 class="font-bold text-slate-800 text-lg">Zone Management</h3>
+                            <p class="text-xs text-slate-500">Define safe and danger areas.</p>
+                        </div>
+                        <button onclick="window.startDrawingZone()" 
+                            class="w-full border-2 border-dashed border-slate-300 rounded-xl p-4 flex items-center justify-center gap-2 text-slate-500 font-medium transition-all hover:border-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 group">
+                            <div class="bg-slate-100 group-hover:bg-indigo-100 p-1.5 rounded-full transition-colors">
+                                <i data-lucide="pen-tool" width="20"></i>
+                            </div>
+                            <span>Draw New Zone</span>
+                        </button>
+                        <div id="drawing-instructions" class="hidden bg-blue-50 border border-blue-100 p-3 rounded-lg text-xs text-blue-800">
+                            <strong>Drawing Mode Active:</strong><br>
+                            1. Click on map to add points.<br>
+                            2. Need at least 3 points.<br>
+                            3. Click "Finish Drawing" when done.
+                        </div>
+
+                        <div id="zone-list-container" class="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1"></div>
+                    </div>
+
+                    <div class="lg:col-span-2 bg-slate-100 rounded-2xl relative overflow-hidden border border-slate-300 shadow-inner group z-0">
+                        <div id="geofenceMap" class="w-full h-full z-0"></div>
+                        
+                        <div id="map-controls" class="hidden absolute bottom-6 right-6 z-[400] flex gap-2">
+                             <button onclick="window.cancelDrawing()" class="bg-white text-slate-700 font-bold px-4 py-2 rounded-lg shadow-lg hover:bg-slate-50 border border-slate-200">
+                                Cancel
+                             </button>
+                             <button onclick="window.finishDrawing()" class="bg-indigo-600 text-white font-bold px-4 py-2 rounded-lg shadow-lg hover:bg-indigo-700 border border-indigo-600">
+                                Finish Drawing
+                             </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="create-zone-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[1000] flex items-center justify-center">
+                    <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md animate-scale-in">
+                        <h3 class="text-lg font-bold text-slate-800 mb-4">Save Zone</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Zone Name</label>
+                                <input type="text" id="zone-name" placeholder="e.g. School, Home" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Zone Type</label>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <label class="cursor-pointer">
+                                        <input type="radio" name="zone-type" value="safe" class="peer hidden" checked>
+                                        <div class="border border-slate-200 peer-checked:border-green-500 peer-checked:bg-green-50 rounded-lg p-3 text-center transition-all">
+                                            <div class="text-green-600 font-bold text-sm mb-1">Safe Zone</div>
+                                        </div>
+                                    </label>
+                                    <label class="cursor-pointer">
+                                        <input type="radio" name="zone-type" value="danger" class="peer hidden">
+                                        <div class="border border-slate-200 peer-checked:border-red-500 peer-checked:bg-red-50 rounded-lg p-3 text-center transition-all">
+                                            <div class="text-red-600 font-bold text-sm mb-1">Danger Zone</div>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Alert Message</label>
+                                <input type="text" id="zone-alert" placeholder="Notification text..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none">
+                            </div>
+                        </div>
+                        <div class="flex gap-3 mt-6">
+                            <button onclick="window.closeZoneModal()" class="flex-1 px-4 py-2 rounded-lg text-slate-600 font-bold text-sm hover:bg-slate-100">Cancel</button>
+                            <button onclick="window.saveNewZone()" class="flex-1 px-4 py-2 rounded-lg bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-700 shadow-lg shadow-indigo-200">Save</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- ----------------- -->
+
+
+
+
+
+
+            <!-- view-settings -->
+            <div id="view-settings" class="tab-content hidden animate-fade-in pb-12">
+                
+                <div class="max-w-2xl mx-auto bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+                    
+                    <div class="mb-8 pb-4 border-b border-slate-100">
+                        <h2 class="text-xl font-bold text-slate-900">Global Configuration</h2>
+                        <p class="text-xs text-slate-500 mt-1">Manage device-level restrictions and policies.</p>
+                    </div>
+
+                    <div class="mb-8">
+                        <h4 class="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">Bedtime Schedules</h4>
+                        <div class="grid grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-2">Weeknight (Sun-Thu)</label>
+                                <input type="time" id="set-bed-week" class="w-full border border-slate-300 rounded-lg p-2.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all cursor-pointer">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-2">Weekend (Fri-Sat)</label>
+                                <input type="time" id="set-bed-weekend" class="w-full border border-slate-300 rounded-lg p-2.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all cursor-pointer">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-8">
+                        <h4 class="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">Security & Permissions</h4>
+                        <div class="space-y-4">
+                            
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <h5 class="font-medium text-slate-900">Uninstall Protection</h5>
+                                    <p class="text-xs text-slate-500">Require Parent PIN to remove the child app.</p>
+                                </div>
+                                <button onclick="window.toggleSettingSwitch('uninstallProtection')" id="btn-uninstallProtection" class="w-12 h-6 rounded-full px-0.5 flex items-center transition-colors duration-200 bg-slate-300 focus:outline-none">
+                                    <div id="knob-uninstallProtection" class="w-5 h-5 bg-white rounded-full shadow-sm transform transition-transform duration-200 translate-x-0"></div>
+                                </button>
+                            </div>
+
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <h5 class="font-medium text-slate-900">High-Accuracy Location</h5>
+                                    <p class="text-xs text-slate-500">Use GPS constantly (consumes more battery).</p>
+                                </div>
+                                <button onclick="window.toggleSettingSwitch('locationTracking')" id="btn-locationTracking" class="w-12 h-6 rounded-full px-0.5 flex items-center transition-colors duration-200 bg-slate-300 focus:outline-none">
+                                    <div id="knob-locationTracking" class="w-5 h-5 bg-white rounded-full shadow-sm transform transition-transform duration-200 translate-x-0"></div>
+                                </button>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <div class="pt-6 border-t border-slate-100 flex justify-end">
+                        <button onclick="window.saveDeviceSettings()" id="save-settings-btn" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-6 py-2.5 rounded-lg flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-slate-200">
+                            <i data-lucide="save" width="18"></i>
+                            <span>Save Settings</span>
+                        </button>
+                    </div>
+
+                </div>
+
+                <div class="mt-8 pt-8 border-t border-slate-100">
+                    <div class="bg-red-50 p-6 rounded-xl border border-red-100">
+                        <h4 class="text-sm font-bold text-red-900 uppercase tracking-wider mb-2">Danger Zone</h4>
+                        <p class="text-xs text-red-600 mb-4">
+                            Removing this device will permanently delete all tracking history, app rules, and logs. This action cannot be undone.
+                        </p>
+                        <button onclick="window.openDeleteModal()" class="w-full bg-white border border-red-200 text-red-600 font-bold py-3 rounded-lg hover:bg-red-600 hover:text-white transition-colors flex items-center justify-center gap-2 shadow-sm">
+                            <i data-lucide="trash-2" width="18"></i>
+                            <span>Remove This Device</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <!-- ------------------- -->
+
+
+
+
+
+
+
+        </div>
+
+        <div id="pairing-modal" class="hidden fixed inset-0 bg-slate-900/50 flex items-center justify-center z-[5000] backdrop-blur-sm">
+            <div class="bg-white p-8 rounded-2xl shadow-2xl w-96 text-center">
+                <div class="w-12 h-12 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-600">
+                    <i data-lucide="smartphone" width="24"></i>
+                </div>
+                <h3 class="text-xl font-bold text-slate-900 mb-2">Pairing Code</h3>
+                <p class="text-sm text-slate-500 mb-6">Enter this in the child's app.</p>
+                <div id="pairing-code-display" class="text-4xl font-mono font-bold text-indigo-600 bg-indigo-50 py-4 rounded-xl mb-6 tracking-widest border border-indigo-100">------</div>
+                <button onclick="document.getElementById('pairing-modal').classList.add('hidden')" class="w-full py-2.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 font-medium">Close</button>
+            </div>
+         </div>
+
+    </main>
+
+    <div id="delete-modal" class="hidden fixed inset-0 bg-slate-900/50 flex items-center justify-center z-[6000] backdrop-blur-sm">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl w-96 text-center animate-fade-in mx-4">
+            <div class="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4 text-red-600">
+                <i data-lucide="alert-triangle" width="24"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900 mb-2">Remove Device?</h3>
+            <p class="text-sm text-slate-500 mb-6">
+                Are you sure you want to remove <span id="del-device-name" class="font-bold text-slate-800">this device</span>?
+                <br>All data will be lost immediately.
+            </p>
+            <div class="flex gap-3">
+                <button onclick="document.getElementById('delete-modal').classList.add('hidden')" class="flex-1 py-2.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 font-bold text-sm">Cancel</button>
+                <button onclick="window.confirmDeleteDevice()" class="flex-1 py-2.5 rounded-lg bg-red-600 text-white hover:bg-red-700 font-bold text-sm shadow-lg shadow-red-200 transition-colors">Yes, Remove</button>
+            </div>
+        </div>
+    </div>
+
+    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
