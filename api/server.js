@@ -56,8 +56,12 @@ const pendingPairings = {};
 // ==========================================
 app.use(cors());                           // Allows API requests from different domains/ports
 app.use(express.json());                   // Parses incoming JSON payloads in the request body
-app.use(express.static(__dirname));        // Serves static files (like your frontend HTML/CSS/JS) from the current directory
 
+
+// Point to the root directory and public directory
+const rootPath = path.join(__dirname, '../'); 
+app.use(express.static(rootPath));
+app.use(express.static(path.join(rootPath, 'public')));
 
 
 
@@ -216,9 +220,8 @@ const authenticateToken = (req, res, next) => {
 // ============================================
 // --- FRONTEND ROUTES ---
 // ============================================
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
-app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'dashboard.html')));
-
+app.get('/', (req, res) => res.sendFile(path.join(rootPath, 'index.html')));
+app.get('/dashboard', (req, res) => res.sendFile(path.join(rootPath, 'public', 'dashboard.html')));
 
 
 
@@ -822,7 +825,7 @@ app.get('/api/alerts/:deviceId', authenticateToken, async (req, res) => {
 // --- API ROUTES: GENERAL SETTINGS ---
 // ==========================================
 
-app.get('/api/settings/:deviceId', authenticateToken, async (req, res) => {
+app.get('/api/settings/:deviceId', async (req, res) => {
     try {
         let settings = await Settings.findOne({ deviceId: req.params.deviceId });
         if (!settings) {
