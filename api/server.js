@@ -243,7 +243,48 @@ const authenticateToken = (req, res, next) => {
 
 
 
+// ============================================
+// --- TEST: RANDOM FIREBASE NOTIFICATIONS TO ANDROID ---
+// ============================================
+setInterval(async () => {
+    try {
+        // Find all Android devices that have successfully sent their FCM token
+        const devices = await Device.find({ fcmToken: { $exists: true, $ne: null } });
+        
+        if (devices.length > 0) {
+            const randomMessages = [
+                "Please finish your homework!",
+                "Dinner is ready in 10 minutes.",
+                "You have 30 minutes of screen time left.",
+                "Great job limiting your screen time today!"
+            ];
+            
+            // Pick a random message
+            const randomText = randomMessages[Math.floor(Math.random() * randomMessages.length)];
 
+            for (const device of devices) {
+                const message = {
+                    // The 'notification' block tells Android to show a visible popup banner
+                    notification: {
+                        title: "Message from Parent",
+                        body: randomText
+                    },
+                    // The 'data' block is silent background data your app can read
+                    data: {
+                        action: "TEST_MESSAGE"
+                    },
+                    token: device.fcmToken
+                };
+
+                // Send the push notification to Google/Android
+                await admin.messaging().send(message);
+                console.log(`📱 [FCM] 📤 Random test notification sent to Android (${device.deviceId})`);
+            }
+        }
+    } catch (error) {
+        console.error("📱 [FCM] ❌ Failed to send test notification:", error.message);
+    }
+}, 2 * 60 * 1000); // Runs every 2 minutes (120,000 ms)
 
 
 
