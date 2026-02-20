@@ -59,10 +59,14 @@ app.use(express.json());                   // Parses incoming JSON payloads in t
 
 
 // Point to the root directory and public directory
+// [CORRECTION 1] - Fixed Pathing so Heroku can find index.html and shield-icon.png
 const rootPath = path.join(__dirname, '../'); 
-app.use(express.static(rootPath));
-app.use(express.static(path.join(rootPath, 'public')));
+app.use(express.static(rootPath)); // Serves files from the root directory
+app.use(express.static(path.join(rootPath, 'public'))); // Serves files from the public directory
 
+// ADD THESE TWO LINES: Tells Heroku exactly where app.js and style.css live
+app.use(express.static(__dirname)); // Serves app.js (which is inside the 'api' folder)
+app.use(express.static(path.join(rootPath, 'src'))); // Serves style.css (which is inside the 'src' folder)
 
 
 
