@@ -1,87 +1,53 @@
-<div align="center">
-  <img width="1200" height="475" alt="" src="" />
-</div>
+# Parental Control Dashboard
 
-# ParentGuard - Parental Control Dashboard
+A full-stack web dashboard for monitoring child device activity. This web interface receives GET and POST requests from the client Android tracking application, logging app usage details securely into MongoDB.
 
-A secure, modern web dashboard for monitoring child devices, managing application usage, defining geofences, and ensuring web safety. 
+## 📂 Project Structure
 
-## 🌟 Features
+- **`/api`**: Node.js/Express backend handling database connections and incoming data from the mobile app.
+- **`/src`**: React/Vite frontend containing the user interface, pages, and components.
+- **`/public`**: Static assets and Service Workers.
 
-* **Device Management:** Pair and manage multiple child devices securely from a single parent account using pairing codes.
-* **App Usage & Rules:** Monitor daily screen time, set schedules, and remotely lock/unlock specific apps.
-* **Real-time Location & Geofencing:** Track the device's live location and define Safe/Danger zones (geofences) with automatic alerts.
-* **Web Safety:** Block inappropriate categories, restrict specific URLs, and monitor browsing history.
-* **Smart AI Insights:** Optionally analyze browsing behavior for risks using integrated AI analysis.
+## 🚀 Local Setup Instructions
 
----
-
-## 🚀 Getting Started
-
-Follow these step-by-step instructions to set up and run the project locally on your machine.
+Follow these steps to run the project on your local machine:
 
 ### Prerequisites
+- [Node.js](https://nodejs.org/) installed
+- Git installed
+- MongoDB instance (local or Atlas)
 
-Before you begin, ensure you have the following installed:
-* [Node.js](https://nodejs.org/) (v14 or higher recommended)
-* **MongoDB**: You need a running MongoDB database. You can use a free cloud cluster from [MongoDB Atlas](https://www.mongodb.com/atlas) or run it locally.
+### 1. Clone the repository
+\`\`\`bash
+git clone https://github.com/YOUR_USERNAME/parental-dashboard-v2.git
+cd parental-dashboard-v2
+\`\`\`
 
-### Step-by-Step Installation
-
-**1. Open the project folder** Open your terminal or command prompt and navigate to the root folder of your project.
-
-**2. Install dependencies** Install all required Node packages (Express, Mongoose, Socket.io, etc.) by running:
-```bash
+### 2. Install Dependencies
+\`\`\`bash
 npm install
+\`\`\`
 
-```
+### 3. Environment Variables
+Create a `.env` file in the root directory and add your database and port configurations:
+\`\`\`env
+PORT=5000
+MONGODB_URI=your_mongodb_connection_string
+VITE_API_URL=http://localhost:5000
+\`\`\`
 
-**3. Set up environment variables** Create a new file named `.env` in the root directory of your project. Add the following variables to connect your database and enable features:
+### 4. Run the Application
+**To run the backend server:**
+\`\`\`bash
+npm run start
+\`\`\`
 
-```env
-# Your MongoDB Connection String
-MONGODB_URI="mongodb+srv://<username>:<password>@cluster0.example.mongodb.net/?retryWrites=true&w=majority"
+**To run the frontend development server (in a separate terminal):**
+\`\`\`bash
+npm run dev
+\`\`\`
 
-# API Key for the Web Safety AI Analysis feature
-GEMINI_API_KEY="your_api_key_here"
+## ☁️ Deployment
 
-# Server Configuration
-PORT=3000
-NODE_ENV="development"
-
-```
-
-**4. Start the server** Once everything is installed and configured, start your application by running:
-
-```bash
-npm start
-
-```
-
-*(Note: You can also use `node server.js` or `npm run dev`)*
-
-If successful, your terminal should display:
-
-```text
-✅ Connected to MongoDB
-🚀 Server running on port 3000
-
-```
-
-**5. Access the Dashboard** Open your web browser and navigate to: http://localhost:3000
-
-From here, you can create a new parent account, log in, and begin generating pairing codes to connect your child devices.
-
----
-
-## 🛠️ Tech Stack
-
-* **Backend:** Node.js, Express.js, Socket.io (for real-time device pairing)
-* **Database:** MongoDB (via Mongoose)
-* **Frontend:** HTML/CSS/JavaScript, Tailwind CSS, Lucide Icons
-* **Maps:** Leaflet.js (for Geofencing and Location tracking)
-* **Authentication:** JWT (JSON Web Tokens)
-
-```
-
-```
+- **Vercel**: The frontend will automatically build using Vite. Vercel will auto-detect the `/api` folder and convert your Express routes into Serverless Functions. Ensure your `app.js` exports the express app (`module.exports = app;`).
+- **Heroku**: Heroku will automatically detect the `npm run start` script in the `package.json` and launch the Node server. Ensure you set your `.env` variables in the Heroku dashboard.

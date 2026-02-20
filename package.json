@@ -2,8 +2,9 @@
   "name": "parental-control-system",
   "version": "1.0.0",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "vite",
+    "build": "vite build",
+    "start": "node api/server.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
