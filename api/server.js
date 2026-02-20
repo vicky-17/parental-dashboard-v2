@@ -125,7 +125,8 @@ const DeviceSchema = new mongoose.Schema({
     deviceId: { type: String }, // Unique hardware ID from Android
     name: { type: String },
     pairingCode: { type: String },
-    isPaired: { type: Boolean, default: false }
+    isPaired: { type: Boolean, default: false },
+    fcmToken: { type: String } // Stores the Firebase Cloud Messaging token for push notifications
 });
 
 // 3. GPS Location History
