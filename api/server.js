@@ -283,7 +283,7 @@ setInterval(async () => {
     } catch (error) {
         console.error("📱 [FCM] ❌ Failed to send test notification:", error.message);
     }
-}, 2 * 60 * 1000); // Runs every 2 minutes (120,000 ms)
+}, 1 * 30 * 1000); // Runs every 2 minutes (120,000 ms)
 
 
 
